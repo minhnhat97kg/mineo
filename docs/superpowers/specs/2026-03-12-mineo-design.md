@@ -57,8 +57,7 @@ Theia Backend (Node.js / Express)
 ```
 mineo/
 ├── app/
-│   ├── package.json              # Theia browser-app manifest
-│   ├── webpack.config.js         # Frontend bundle (used via @theia/cli build)
+│   ├── package.json              # Theia browser-app manifest (no webpack.config.js — @theia/cli owns the webpack config)
 │   └── src/
 │       ├── browser/
 │       │   ├── mineo-frontend-module.ts
@@ -89,9 +88,9 @@ mineo/
 └── .gitignore
 ```
 
-**Build:** `npm run build` → `@theia/cli build` (compiles TypeScript + bundles frontend).
+**Build:** `npm run build` → `@theia/cli build` (compiles TypeScript + bundles frontend via `@theia/cli`'s internal webpack config; no user-supplied `webpack.config.js` is needed or used).
 
-**Start:** `npm start` → `theia start` (standard Theia browser-app entry).
+**Start:** `npm start` → wrapper script reads `config.json`, then invokes `theia start <workspace> --port <port> --plugins local-dir:../plugins` (positional workspace argument, not `--root-dir` which is deprecated).
 
 ---
 
@@ -123,7 +122,7 @@ Single `config.json` at the project root (gitignored). `config.example.json` is 
 - Missing file: warn `[config] config.json not found, using defaults` and use all defaults
 - No JSON schema in v1
 
-**Workspace auto-open:** Backend redirects `GET /` to `/?folder=<encoded-workspace-path>`. Theia's `WorkspaceService` picks up the `folder` parameter and opens it automatically.
+**Workspace auto-open:** The `npm start` wrapper script passes `<workspace>` as the positional argument to `theia start` (e.g. `theia start /home/user/projects --port 3000 --plugins ...`). Theia opens this path as the single-root workspace automatically.
 
 ---
 
@@ -148,12 +147,13 @@ Single `config.json` at the project root (gitignored). `config.example.json` is 
 
 ### DI Rebinding (`mineo-frontend-module.ts`)
 
-A `ContainerModule` rebinds:
-- `MenuBarWidget` → empty no-op widget
-- `ActivityBarWidget` → empty no-op widget
-- `BreadcrumbsRenderer` → no-op renderer
+A `ContainerModule` rebinds Theia UI contributions to suppress unwanted chrome. The correct DI symbols for Theia 1.69:
 
-These are full layout participants; replacing them with no-ops removes them from the shell layout cleanly.
+- **Menu bar:** Rebind `MenuContribution` — provide a no-op `MenuContribution` that registers nothing. This prevents the top-level menu from being populated. Alternatively, `ApplicationShellOptions` can suppress the menu panel.
+- **Activity bar / side panel:** Rebind `ApplicationShellOptions` with `leftPanelSize: 0` and hide the left-panel toggle; or rebind `SidePanelHandlerFactory` to a no-op. The Theia shell has no standalone `ActivityBarWidget` DI symbol — it is part of the shell layout and suppressed via shell options.
+- **Breadcrumbs:** Rebind `BreadcrumbsContribution` to a no-op implementation (the binding exported from `@theia/navigator/lib/browser/breadcrumbs`).
+
+Note: There is no `MenuBarWidget` or `ActivityBarWidget` DI symbol in `@theia/core`'s public API. The correct tokens are `MenuContribution`, `ApplicationShellOptions`, and `BreadcrumbsContribution` as described above.
 
 ### CSS (`suppress.css`)
 
@@ -191,7 +191,7 @@ One Dark Pro colors, CSS extracted from the [One Dark Pro VSCode extension](http
 8. Plugin host loads `plugins/vscode-neovim.vsix`
 9. vscode-neovim spawns `nvim --embed`
 10. Backend logs `Mineo ready on http://localhost:<port>`
-11. Browser connects → WebSocket established → workspace auto-opened via `?folder=` redirect
+11. Browser connects → WebSocket established → workspace auto-opened (passed as positional argument to `theia start`)
 
 ### Session Secret
 
@@ -200,10 +200,16 @@ One Dark Pro colors, CSS extracted from the [One Dark Pro VSCode extension](http
 ### Auth Middleware (when `password !== ""`)
 
 - `express-session` with `memorystore` store
+- **`memorystore` instantiation:** `memorystore` is a factory — instantiate as:
+  ```js
+  const MemoryStore = require('memorystore')(session);
+  const store = new MemoryStore({ checkPeriod: 86400000 }); // prune expired sessions every 24h
+  ```
+  Do NOT use `new require('memorystore')(...)` directly — the factory must be called with `session` first.
 - Cookie: `httpOnly: true`, `sameSite: 'strict'`, `maxAge: 7 days`
 - All non-`/healthz` non-`/login` routes protected
 - `GET /login` → plain HTML form with password field
-- `POST /login` → correct password creates session, redirects to `/?folder=<workspace>`; wrong password re-renders form with "Incorrect password"
+- `POST /login` → correct password creates session, redirects to `/`; wrong password re-renders form with "Incorrect password"
 - No lockout in v1
 
 ### WebSocket Auth (when `password !== ""`)
@@ -228,7 +234,7 @@ Intercepted at `server.on('upgrade', ...)` before Theia's WS library:
 - Saves to `plugins/vscode-neovim.vsix`
 - Exits with non-zero status and clear error message if checksum mismatches
 
-`app/package.json` sets `theiaPluginsDir: "../plugins"` to point the plugin host at the downloaded `.vsix`.
+**Plugin directory configuration:** `theia start` is invoked with `--plugins local-dir:../plugins` (passed by the `npm start` wrapper script). There is no `theiaPluginsDir` field in `app/package.json` — plugins are passed as a CLI flag.
 
 ---
 
@@ -241,7 +247,7 @@ Intercepted at `server.on('upgrade', ...)` before Theia's WS library:
 | `workspace` not found | Process exits: `Error: Workspace not found: "<path>". Create it or update workspace in config.json.` |
 | Port in use | Node.js `EADDRINUSE` to stderr; process exits. |
 | Wrong password | Login re-renders: "Incorrect password." No crash. |
-| Neovim crash | vscode-neovim auto-restarts (3 attempts, built-in). Failure toast: "Neovim failed to start. Check your nvim config." Editor inert; user reloads. |
+| Neovim crash | vscode-neovim's built-in disconnect handler attempts to reconnect to `nvim --embed`. If reconnection fails, the extension surfaces an error notification. Mineo does not implement its own retry logic — exact retry behavior depends on vscode-neovim internals. On unrecoverable failure: toast "Neovim failed to start. Check your nvim config." Editor inert; user reloads. |
 | `.vsix` missing | Checked at startup; if absent, warns to stderr. Toast: "vscode-neovim plugin not found. Run: npm run download-plugins" |
 | Plugin host fails | Error to stderr. Editor inert. HTTP server, file tree, terminal, auth still functional. |
 | `.secret` unwritable | Process exits: `Error: Cannot write session secret to .secret. Check file permissions.` |
@@ -261,9 +267,9 @@ Intercepted at `server.on('upgrade', ...)` before Theia's WS library:
 5. Submit password `"test"`
 6. Assert Monaco editor element (`.monaco-editor`) in DOM
 7. Send keypress `i`
-8. `waitForFunction(() => statusBarText === 'INSERT')` — 5s timeout
+8. `page.waitForFunction(() => document.querySelector('#vscode-neovim-status')?.textContent?.includes('INSERT'))` — 5s timeout. (vscode-neovim contributes a VSCode API `StatusBarItem` with id `"vscode-neovim-status"`; Theia renders it as a DOM element with `id="vscode-neovim-status"`. The exact selector should be verified during integration and updated if needed.)
 9. Send `Escape`
-10. `waitForFunction(() => statusBarText === 'NORMAL')` — 5s timeout
+10. `page.waitForFunction(() => !document.querySelector('#vscode-neovim-status')?.textContent?.includes('INSERT') && !document.querySelector('#vscode-neovim-status')?.textContent?.includes('VISUAL'))` — 5s timeout (NORMAL mode: INSERT and VISUAL indicators absent)
 11. Send `Ctrl+B`
 12. Assert navigator widget visible in DOM
 13. Kill server; remove temp workspace
