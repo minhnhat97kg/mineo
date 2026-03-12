@@ -37,12 +37,12 @@ test('expands tilde in nvim.bin', () => {
   assert.equal(cfg.nvim.bin, path.join(os.homedir(), 'bin/nvim'));
 });
 
-test('uses default and warns for wrong type: port', (t) => {
+test('uses default and warns for wrong type: port', (_t) => {
+  const p = writeTmpConfig({ port: 'notanumber' });
   const stderrMsgs: string[] = [];
   const origWrite = process.stderr.write.bind(process.stderr);
   // @ts-ignore
   process.stderr.write = (s: string) => { stderrMsgs.push(s); return true; };
-  const p = writeTmpConfig({ port: 'notanumber' });
   const cfg = loadConfig(p);
   // @ts-ignore
   process.stderr.write = origWrite;
