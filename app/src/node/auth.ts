@@ -65,15 +65,22 @@ export function registerAuth(opts: AuthOptions): void {
 
   app.post('/login', (req: Request, res: Response) => {
     if (req.body?.password === password) {
-      (req.session as any).authenticated = true;
-      res.redirect('/');
+      req.session.regenerate((err) => {
+        if (err) {
+          res.status(500).send('Session error');
+          return;
+        }
+        (req.session as any).authenticated = true;
+        res.redirect('/');
+      });
     } else {
       res.send(LOGIN_HTML('Incorrect password'));
     }
   });
 
-  // Auth guard — must come after /login routes
+  // Auth guard — must come after /login routes. /healthz is always exempt.
   app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path === '/healthz') return next();
     if ((req.session as any)?.authenticated) return next();
     res.redirect('/login');
   });
