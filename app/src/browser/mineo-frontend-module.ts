@@ -1,3 +1,6 @@
+import './style/suppress.css';
+import './style/theme.css';
+
 import { ContainerModule } from '@theia/core/shared/inversify';
 import { BreadcrumbsContribution, Breadcrumb } from '@theia/core/lib/browser/breadcrumbs/breadcrumbs-contribution';
 import { MenuContribution } from '@theia/core/lib/common/menu';

@@ -1,0 +1,30 @@
+/* Mineo: suppress Theia chrome we don't want */
+
+/* Tab bar (Lumino — Theia 1.27+) */
+.lm-TabBar {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Editor container: fill space vacated by tab bar */
+.theia-main-content-panel .lm-Widget.lm-SplitPanel-child:first-child {
+  flex: 1 !important;
+}
+
+/* Menu bar */
+.theia-menu-bar,
+.p-MenuBar {
+  display: none !important;
+}
+
+/* Status bar area for activity bar toggle button */
+.theia-left-panel-toggle-button {
+  display: none !important;
+}
+
+/* Panel borders/handles residual chrome */
+.lm-SplitPanel-handle {
+  background: #3e4451;
+}
