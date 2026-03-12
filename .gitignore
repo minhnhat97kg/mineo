@@ -4,3 +4,4 @@ dist/
 config.json
 .secret
 plugins/*.vsix
+test-results/

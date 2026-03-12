@@ -1,13 +1,13 @@
-import './style/suppress.css';
-import './style/theme.css';
+import '../../src/browser/style/suppress.css';
+import '../../src/browser/style/theme.css';
 
-import { ContainerModule } from '@theia/core/shared/inversify';
-import { BreadcrumbsContribution, Breadcrumb } from '@theia/core/lib/browser/breadcrumbs/breadcrumbs-contribution';
-import { MenuContribution } from '@theia/core/lib/common/menu';
+import { ContainerModule, injectable } from '@theia/core/shared/inversify';
+import { BreadcrumbsContribution, Breadcrumb } from '@theia/core/lib/browser/breadcrumbs/breadcrumbs-constants';
+import { MenuContribution, MenuModelRegistry } from '@theia/core/lib/common/menu';
 import { ApplicationShellOptions } from '@theia/core/lib/browser/shell/application-shell';
-import { URI } from '@theia/core/lib/common/uri';
-import { injectable } from '@theia/core/shared/inversify';
-import { MenuModelRegistry } from '@theia/core/lib/common/menu';
+import URI from '@theia/core/lib/common/uri';
+import { Emitter, Event } from '@theia/core/lib/common/event';
+import { Disposable } from '@theia/core/lib/common/disposable';
 
 // No-op MenuContribution — registers nothing
 @injectable()
@@ -17,18 +17,16 @@ class NoOpMenuContribution implements MenuContribution {
   }
 }
 
-// No-op BreadcrumbsContribution
-// Check app/node_modules/@theia/core/lib/browser/breadcrumbs/breadcrumbs-contribution.d.ts
-// for required interface methods and add stub implementations here if tsc errors occur.
-// Common required methods: computeBreadcrumbs(uri), labelForCrumb(breadcrumb)
+// No-op BreadcrumbsContribution — satisfies the full BreadcrumbsContribution interface
+// from @theia/core/lib/browser/breadcrumbs/breadcrumbs-constants (Theia 1.69)
 @injectable()
 class NoOpBreadcrumbsContribution implements BreadcrumbsContribution {
-  // Required method stubs — TypeScript strict mode requires all interface methods.
-  // Exact signatures must match what @theia/core/lib/browser/breadcrumbs/breadcrumbs-contribution.d.ts declares.
-  // If tsc errors on these stubs, check the .d.ts and adjust signatures accordingly.
+  readonly type: symbol = Symbol('NoOpBreadcrumbs');
+  readonly priority: number = 0;
+  private readonly _onDidChangeBreadcrumbs = new Emitter<URI>();
+  readonly onDidChangeBreadcrumbs: Event<URI> = this._onDidChangeBreadcrumbs.event;
   async computeBreadcrumbs(_uri: URI): Promise<Breadcrumb[]> { return []; }
-  labelForCrumb(_breadcrumb: Breadcrumb): string { return ''; }
-  iconForCrumb(_breadcrumb: Breadcrumb): string { return ''; }
+  async attachPopupContent(_breadcrumb: Breadcrumb, _parent: HTMLElement): Promise<Disposable | undefined> { return undefined; }
 }
 
 export default new ContainerModule((bind, _unbind, _isBound, rebind) => {

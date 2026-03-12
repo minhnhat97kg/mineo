@@ -37,7 +37,10 @@ const port = String(cfg.port);
 const pluginsFlag = 'local-dir:../plugins';
 
 // theia start <workspace> --port <port> --plugins local-dir:../plugins
-const theia = path.join(APP_DIR, 'node_modules', '.bin', 'theia');
+// npm workspaces may hoist the theia binary to the root node_modules — fall back to root if not found in app/
+const theiaInApp = path.join(APP_DIR, 'node_modules', '.bin', 'theia');
+const theiaInRoot = path.join(ROOT, 'node_modules', '.bin', 'theia');
+const theia = fs.existsSync(theiaInApp) ? theiaInApp : theiaInRoot;
 
 process.chdir(APP_DIR);
 execFileSync(theia, ['start', workspace, '--port', port, '--plugins', pluginsFlag], {
