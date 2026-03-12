@@ -1,9 +1,9 @@
-import { ContainerModule } from '@theia/core/shared/inversify';
+import { ContainerModule, injectable } from '@theia/core/shared/inversify';
 import { BackendApplicationContribution } from '@theia/core/lib/node/backend-application';
-import { injectable } from '@theia/core/shared/inversify';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as http from 'http';
+import { execSync } from 'child_process';
 import { Application } from 'express';
 import { loadConfig } from './config';
 import { loadOrCreateSecret } from './secret';
@@ -29,7 +29,7 @@ class MineoBACContribution implements BackendApplicationContribution {
 
     // Validate nvim binary
     try {
-      require('child_process').execSync(`"${this.cfg.nvim.bin}" --version`, { stdio: 'ignore' });
+      execSync(`"${this.cfg.nvim.bin}" --version`, { stdio: 'ignore' });
     } catch {
       process.stderr.write(
         `Error: nvim not found at "${this.cfg.nvim.bin}". Install Neovim or fix nvim.bin in config.json.\n`
