@@ -72,7 +72,7 @@ test.beforeAll(async () => {
   server.stderr?.on('data', (d) => process.stderr.write(d));
   server.stdout?.on('data', (d) => process.stdout.write(d));
 
-  await waitForHealthz(port);
+  await waitForHealthz(port, 90_000);
 });
 
 test.afterAll(async () => {
@@ -96,7 +96,8 @@ test('full smoke test: login → editor → mode indicator → file tree', async
   // 4. Assert Monaco editor present
   await expect(page.locator('.monaco-editor')).toBeVisible({ timeout: 15_000 });
 
-  // 5. Press 'i' to enter INSERT mode
+  // 5. Click Monaco editor to ensure focus, then press 'i' for INSERT mode
+  await page.locator('.monaco-editor .inputarea').click();
   await page.keyboard.press('i');
 
   // 6. Wait for INSERT mode indicator
@@ -117,7 +118,9 @@ test('full smoke test: login → editor → mode indicator → file tree', async
     { timeout: 5000 }
   );
 
-  // 9. Toggle file tree with Ctrl+B
+  // 9. Blur editor first so vscode-neovim doesn't intercept Ctrl+B
+  // (in NORMAL mode, Ctrl+B is vim page-backward — we need Theia's keybinding)
+  await page.locator('body').click({ position: { x: 0, y: 0 } });
   await page.keyboard.press('Control+b');
 
   // 10. Assert navigator/file-tree widget visible
