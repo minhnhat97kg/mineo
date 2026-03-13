@@ -2,16 +2,13 @@ import '../../src/browser/style/suppress.css';
 import '../../src/browser/style/theme.css';
 
 import { ContainerModule, injectable, inject } from '@theia/core/shared/inversify';
-import { ColorContribution } from '@theia/core/lib/browser/color-application-contribution';
-import { ColorRegistry } from '@theia/core/lib/browser/color-registry';
 import { BreadcrumbsContribution, Breadcrumb } from '@theia/core/lib/browser/breadcrumbs/breadcrumbs-constants';
 import { MenuContribution, MenuModelRegistry } from '@theia/core/lib/common/menu';
 import { ApplicationShellOptions, ApplicationShell } from '@theia/core/lib/browser/shell/application-shell';
-import { FrontendApplicationContribution, FrontendApplication } from '@theia/core/lib/browser';
+import { FrontendApplicationContribution } from '@theia/core/lib/browser';
 import { FrontendApplicationStateService } from '@theia/core/lib/browser/frontend-application-state';
 import { OpenHandler } from '@theia/core/lib/browser/opener-service';
 import { MessageService } from '@theia/core/lib/common/message-service';
-import { TerminalService } from '@theia/terminal/lib/browser/base/terminal-service';
 import URI from '@theia/core/lib/common/uri';
 import { Emitter, Event } from '@theia/core/lib/common/event';
 import { Disposable, DisposableCollection } from '@theia/core/lib/common/disposable';
@@ -19,13 +16,26 @@ import { StatusBar, StatusBarAlignment } from '@theia/core/lib/browser/status-ba
 import { CommandRegistry } from '@theia/core/lib/common/command';
 import { EditorWidget } from '@theia/editor/lib/browser/editor-widget';
 import { EditorManager } from '@theia/editor/lib/browser';
-import { TerminalWidget } from '@theia/terminal/lib/browser/base/terminal-widget';
-import { Widget, waitForRevealed } from '@theia/core/lib/browser/widgets/widget';
+import { Widget } from '@theia/core/lib/browser/widgets/widget';
 import { SocketWriteBuffer } from '@theia/core/lib/common/messaging/socket-write-buffer';
+import { ServiceConnectionProvider, RemoteConnectionProvider } from '@theia/core/lib/browser/messaging/service-connection-provider';
+import { FileNavigatorContribution } from '@theia/navigator/lib/browser/navigator-contribution';
+import { NvimWidget } from './neovim-widget';
 
 // Increase disconnected buffer size to 50MB (default is 100KB)
 // to prevent "Max disconnected buffer size exceeded" errors when backgrounded
 (SocketWriteBuffer as any).DISCONNECTED_BUFFER_SIZE = 50 * 1024 * 1024;
+
+// ─── Prevent stale layout restoration ────────────────────────────────────────
+// Theia persists the shell layout (including terminal widgets) to localStorage
+// on window close, then restores it on reload. This causes stale terminal
+// widgets from previous server sessions to race with our nvim widget.
+// Nuke the layout key at module-load time (before Theia's DI container starts)
+// so Mineo always starts fresh. Our NvimTerminalContribution handles layout.
+if (typeof window !== 'undefined' && window.localStorage) {
+  const pathname = window.location.pathname;
+  window.localStorage.removeItem(`theia:${pathname}:layout`);
+}
 
 // ─── ModeService ───────────────────────────────────────────────────────────
 
@@ -102,6 +112,97 @@ class ModeService {
   }
 }
 
+/**
+ * TouchScrollContribution — adds momentum touch-scroll to all Theia panels.
+ * Theia's tree/list widgets use overflow:auto but don't handle touch events.
+ * This walks up from the touch target to find the nearest scrollable ancestor
+ * and scrolls it, enabling natural touch scrolling in the explorer and sidebars.
+ */
+@injectable()
+class TouchScrollContribution implements FrontendApplicationContribution {
+    onStart(): void {
+        if (!window.matchMedia('(pointer: coarse)').matches) return;
+
+        let startY = 0;
+        let startX = 0;
+        let target: Element | null = null;
+
+        const findScrollable = (el: Element | null): Element | null => {
+            while (el && el !== document.body) {
+                const style = window.getComputedStyle(el);
+                const overflowY = style.overflowY;
+                const overflowX = style.overflowX;
+                const canScrollY = (overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight;
+                const canScrollX = (overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth;
+                if (canScrollY || canScrollX) return el;
+                el = el.parentElement;
+            }
+            return null;
+        };
+
+        document.body.addEventListener('touchstart', (e: TouchEvent) => {
+            if (e.touches.length !== 1) return;
+            startY = e.touches[0].clientY;
+            startX = e.touches[0].clientX;
+            target = findScrollable(e.target as Element);
+        }, { passive: true });
+
+        document.body.addEventListener('touchmove', (e: TouchEvent) => {
+            if (!target || e.touches.length !== 1) return;
+            const dy = startY - e.touches[0].clientY;
+            const dx = startX - e.touches[0].clientX;
+            target.scrollTop += dy;
+            target.scrollLeft += dx;
+            startY = e.touches[0].clientY;
+            startX = e.touches[0].clientX;
+        }, { passive: true });
+
+        document.body.addEventListener('touchend', () => {
+            target = null;
+        }, { passive: true });
+    }
+}
+
+/**
+ * MenuBarToggleContribution — adds a chevron button that collapses/expands
+ * the top menu bar. State is persisted in localStorage.
+ */
+@injectable()
+class MenuBarToggleContribution implements FrontendApplicationContribution {
+  private static readonly STORAGE_KEY = 'mineo.menuBarCollapsed';
+
+  onStart(): void {
+    const collapsed = localStorage.getItem(MenuBarToggleContribution.STORAGE_KEY) === '1';
+
+    // Create the fixed chevron button
+    const btn = document.createElement('button');
+    btn.className = 'nvim-menu-toggle';
+    btn.title = 'Toggle menu bar';
+    document.body.appendChild(btn);
+
+    const apply = (isCollapsed: boolean): void => {
+      const panel = document.getElementById('theia-top-panel');
+      if (panel) {
+        panel.classList.toggle('menu-collapsed', isCollapsed);
+      }
+      document.body.classList.toggle('nvim-menu-collapsed', isCollapsed);
+      btn.textContent = isCollapsed ? '›' : '‹';
+      btn.style.display = isCollapsed ? 'block' : '';
+      localStorage.setItem(MenuBarToggleContribution.STORAGE_KEY, isCollapsed ? '1' : '0');
+    };
+
+    btn.addEventListener('click', () => {
+      const panel = document.getElementById('theia-top-panel');
+      const isNowCollapsed = panel ? !panel.classList.contains('menu-collapsed') : false;
+      apply(isNowCollapsed);
+    });
+
+    // Restore persisted state after the shell has rendered
+    // (small delay so #theia-top-panel exists in DOM)
+    setTimeout(() => apply(collapsed), 100);
+  }
+}
+
 // No-op MenuContribution
 @injectable()
 class NoOpMenuContribution implements MenuContribution {
@@ -122,38 +223,37 @@ class NoOpBreadcrumbsContribution implements BreadcrumbsContribution {
 }
 
 /**
- * NvimTerminalContribution manages the Neovim terminal widget lifecycle.
+ * NvimTerminalContribution manages the Neovim widget lifecycle.
  * It implements ModeActivator so ModeService can trigger widget operations.
+ * Uses a dedicated NvimWidget (BaseWidget + xterm.js) instead of Theia's
+ * TerminalWidget, completely bypassing TerminalService.
  */
 @injectable()
 class NvimTerminalContribution implements FrontendApplicationContribution, ModeActivator {
-  @inject(TerminalService) protected readonly terminalService!: TerminalService;
   @inject(ApplicationShell) protected readonly shell!: ApplicationShell;
   @inject(ModeService) protected readonly modeService!: ModeService;
   @inject(EditorManager) protected readonly editorManager!: EditorManager;
   @inject(MessageService) protected readonly messageService!: MessageService;
   @inject(FrontendApplicationStateService) protected readonly stateService!: FrontendApplicationStateService;
+  @inject(NvimWidget) protected readonly nvimWidget!: NvimWidget;
+  @inject(FileNavigatorContribution) protected readonly navigatorContribution!: FileNavigatorContribution;
+  @inject(RemoteConnectionProvider) protected readonly connectionProvider!: ServiceConnectionProvider;
 
-  private nvimWidget: TerminalWidget | undefined;
+  private started = false;
+  private bufferWatchActive = false;
 
   onStart(): void {
     this.modeService.registerActivator(this);
-  }
 
-  async onDidInitializeLayout(_app: FrontendApplication): Promise<void> {
-    // We CANNOT await reachedState('ready') here because this method is called
-    // by fireOnDidInitializeLayout(), and 'ready' is only set AFTER that call
-    // returns — awaiting here would deadlock.
-    //
-    // Instead, return immediately and schedule activation once 'ready' fires.
-    // The one-shot listener on onStateChanged ensures we run exactly once,
-    // after Theia has fully restored the previous session layout.
-    const disposable = this.stateService.onStateChanged(state => {
-      if (state === 'ready') {
-        disposable.dispose();
-        this.modeService.activate(this.modeService.currentMode, { startup: true })
-          .catch(err => this.messageService.error('Mineo: failed to activate editor mode: ' + err));
-      }
+    // Wait for 'ready' state then activate the editor mode.
+    // reachedState returns a Deferred that resolves when state >= 'ready'.
+    // This is safe here because onStart() runs during 'startContributions'
+    // which is before 'ready', so the deferred will resolve later.
+    this.stateService.reachedState('ready').then(() => {
+      this.modeService.activate(this.modeService.currentMode, { startup: true })
+        .catch(err => {
+          this.messageService.error('Mineo: failed to activate editor mode: ' + err);
+        });
     });
   }
 
@@ -161,70 +261,59 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
 
   async activateNeovimMode(startup: boolean): Promise<void> {
     // Step 0: dirty-check (skipped on startup — no user-created editor state yet)
-    // EditorManager has no getDirtyEditors() method in Theia 1.x — use .all + saveable.dirty
     if (!startup) {
       const dirty = this.editorManager.all.filter(w => w.saveable.dirty);
       if (dirty.length > 0) {
         throw new Error('Save or discard Monaco changes before switching to Neovim.');
       }
-    }
-
-    // Step 1: create or reuse the nvim terminal widget
-    const created = !this.nvimWidget || this.nvimWidget.isDisposed;
-    try {
-      if (created) {
-        this.nvimWidget = await this.terminalService.newTerminal({
-          title: 'Neovim',
-          shellPath: '/bin/sh',
-          shellArgs: ['-c', 'exec nvim --listen /tmp/nvim.sock'],
-          env: {},
-        });
-      }
-      this.shell.addWidget(this.nvimWidget!, { area: 'main' });
-      this.shell.activateWidget(this.nvimWidget!.id);
-      // Wait until the widget is genuinely visible, then force a resize so
-      // xterm.js runs fitAddon.fit() and paints the terminal content.
-      // We must set needsResize=true first because onUpdateRequest only calls
-      // resizeTerminal() when that flag is set; open() alone leaves it blank.
-      await waitForRevealed(this.nvimWidget!);
-      (this.nvimWidget as any).needsResize = true;
-      this.nvimWidget!.update();
-    } catch (err) {
-      // Rollback: if we just created the widget, dispose it (it may not be in
-      // the shell yet, so dispose() is safer than closeWidget())
-      if (created && this.nvimWidget) {
-        this.nvimWidget.dispose();
-        this.nvimWidget = undefined;
-      }
-      throw err;
-    }
-
-    // Step 2: close Monaco editor widgets from the main panel (skipped on startup)
-    // We close EditorWidget instances only — not terminal panels, diff viewers, etc.
-    // Snapshot into an array first to avoid iterating a live iterator while closing.
-    if (!startup) {
+      // Close Monaco editor widgets from the main panel
       const mainWidgets = Array.from(
         (this.shell.mainPanel as any).widgets() as IterableIterator<Widget>
       ).filter(w => w instanceof EditorWidget);
       await Promise.all(mainWidgets.map(w => this.shell.closeWidget(w.id)));
     }
 
+    // Step 1: start the NvimWidget PTY connection (only once)
+    if (!this.started) {
+      await this.nvimWidget.start();
+      this.started = true;
+    }
+
+    // Step 2: add to shell and activate
+    this.shell.addWidget(this.nvimWidget, { area: 'main' });
+    this.shell.activateWidget(this.nvimWidget.id);
+
     // Step 3: poll /api/nvim-ready (non-fatal; never throws)
     await this._waitForNvimReady();
+
+    // Step 4: start buffer-watch to sync explorer selection (only once)
+    if (!this.bufferWatchActive) {
+      this.bufferWatchActive = true;
+      this._startBufferWatch();
+    }
   }
 
   async activateMonacoMode(): Promise<void> {
-    // Close the nvim widget if it exists — hideWidget is not available in Theia 1.69.
-    // The widget is recreated on next switch to neovim mode (activateNeovimMode creates
-    // a new terminal if nvimWidget is disposed).
-    if (this.nvimWidget && !this.nvimWidget.isDisposed) {
-      await this.shell.closeWidget(this.nvimWidget.id);
-      this.nvimWidget = undefined;
+    // Hide the nvim widget (don't dispose — keep the PTY alive)
+    if (this.nvimWidget.isAttached) {
+      this.shell.closeWidget(this.nvimWidget.id);
     }
     // Monaco area is already empty — NvimOpenHandler returns -1 in monaco mode
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
+
+  private _startBufferWatch(): void {
+    this.connectionProvider.listen('/services/nvim-buffer-watch', (_path, channel) => {
+      channel.onMessage(e => {
+        const filePath = e().readString();
+        if (!filePath) return;
+        const uri = new URI('file://' + filePath);
+        // Reveal in file navigator — non-fatal, ignore errors
+        this.navigatorContribution.selectFileNode(uri).catch(() => { /* ignore */ });
+      });
+    }, false);
+  }
 
   private async _waitForNvimReady(): Promise<void> {
     const POLL_MS = 200;
@@ -333,51 +422,12 @@ class EditorModeStatusBarContribution implements FrontendApplicationContribution
   }
 }
 
-// ─── Terminal Color Theme ───────────────────────────────────────────────────
-
-/**
- * Registers One Dark Pro ANSI terminal colors so xterm.js renders Neovim
- * with the same palette as it appears in a native terminal with this theme.
- * Colors sourced from: https://github.com/Binaryify/OneDark-Pro
- */
-@injectable()
-class OneDarkTerminalColors implements ColorContribution {
-  registerColors(colors: ColorRegistry): void {
-    const oneDark: Record<string, string> = {
-      'terminal.background':            '#282c34',
-      'terminal.foreground':            '#abb2bf',
-      'terminalCursor.foreground':      '#528bff',
-      'terminalCursor.background':      '#282c34',
-      'terminal.selectionBackground':   '#3e4451',
-      'terminal.ansiBlack':             '#282c34',
-      'terminal.ansiRed':               '#e06c75',
-      'terminal.ansiGreen':             '#98c379',
-      'terminal.ansiYellow':            '#e5c07b',
-      'terminal.ansiBlue':              '#61afef',
-      'terminal.ansiMagenta':           '#c678dd',
-      'terminal.ansiCyan':              '#56b6c2',
-      'terminal.ansiWhite':             '#abb2bf',
-      'terminal.ansiBrightBlack':       '#5c6370',
-      'terminal.ansiBrightRed':         '#e06c75',
-      'terminal.ansiBrightGreen':       '#98c379',
-      'terminal.ansiBrightYellow':      '#e5c07b',
-      'terminal.ansiBrightBlue':        '#61afef',
-      'terminal.ansiBrightMagenta':     '#c678dd',
-      'terminal.ansiBrightCyan':        '#56b6c2',
-      'terminal.ansiBrightWhite':       '#ffffff',
-    };
-    for (const [id, value] of Object.entries(oneDark)) {
-      colors.register({ id, description: id, defaults: { dark: value, light: value, hcDark: value, hcLight: value } });
-    }
-  }
-}
-
 export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   // ModeService — singleton that owns editor mode state
   bind(ModeService).toSelf().inSingletonScope();
 
-  // Register One Dark Pro terminal color palette for xterm.js
-  bind(ColorContribution).to(OneDarkTerminalColors).inSingletonScope();
+  // NvimWidget — singleton BaseWidget with embedded xterm.js (colors baked in)
+  bind(NvimWidget).toSelf().inSingletonScope();
 
   // Register the Neovim file opener
   bind(OpenHandler).to(NvimOpenHandler).inSingletonScope();
@@ -388,6 +438,12 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   // Register status bar + toggle command contribution
   bind(FrontendApplicationContribution).to(EditorModeStatusBarContribution).inSingletonScope();
 
+  // Touch scroll for Theia panels (explorer, sidebars)
+  bind(FrontendApplicationContribution).to(TouchScrollContribution).inSingletonScope();
+
+  // Menu bar collapse/expand toggle
+  bind(FrontendApplicationContribution).to(MenuBarToggleContribution).inSingletonScope();
+
   // Suppress breadcrumbs
   try {
     rebind(BreadcrumbsContribution).to(NoOpBreadcrumbsContribution).inSingletonScope();
@@ -396,21 +452,21 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   }
 
   // Suppress menu bar
-  bind(MenuContribution).to(NoOpMenuContribution).inSingletonScope();
+  // bind(MenuContribution).to(NoOpMenuContribution).inSingletonScope();
 
   // Suppress panels and set initial layout
   try {
     rebind(ApplicationShellOptions).toConstantValue({
       leftPanelSize: 240, // Keep space for File Explorer
       rightPanelSize: 0,
-      bottomPanelSize: 0,
+      bottomPanelSize: 200, // Space for Theia's built-in terminal
       leftPanelExpandThreshold: 0,
     });
   } catch {
     bind(ApplicationShellOptions).toConstantValue({
       leftPanelSize: 240,
       rightPanelSize: 0,
-      bottomPanelSize: 0,
+      bottomPanelSize: 200,
       leftPanelExpandThreshold: 0,
     });
   }
