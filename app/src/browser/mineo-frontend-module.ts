@@ -12,6 +12,8 @@ import { TerminalService } from '@theia/terminal/lib/browser/base/terminal-servi
 import URI from '@theia/core/lib/common/uri';
 import { Emitter, Event } from '@theia/core/lib/common/event';
 import { Disposable } from '@theia/core/lib/common/disposable';
+import { StatusBar, StatusBarAlignment } from '@theia/core/lib/browser/status-bar/status-bar';
+import { CommandRegistry } from '@theia/core/lib/common/command';
 import { EditorWidget } from '@theia/editor/lib/browser/editor-widget';
 import { EditorManager } from '@theia/editor/lib/browser';
 import { TerminalWidget } from '@theia/terminal/lib/browser/base/terminal-widget';
@@ -261,6 +263,44 @@ class NvimOpenHandler implements OpenHandler {
   }
 }
 
+/**
+ * EditorModeStatusBarContribution shows the current editor mode (NEOVIM / MONACO)
+ * in the status bar and registers the `mineo.toggleEditorMode` command.
+ */
+@injectable()
+class EditorModeStatusBarContribution implements FrontendApplicationContribution {
+  @inject(ModeService) protected readonly modeService!: ModeService;
+  @inject(StatusBar) protected readonly statusBar!: StatusBar;
+  @inject(CommandRegistry) protected readonly commands!: CommandRegistry;
+
+  private static readonly STATUS_BAR_ID = 'mineo.editorMode';
+  private static readonly COMMAND_ID = 'mineo.toggleEditorMode';
+
+  onStart(): void {
+    // Register the toggle command
+    this.commands.registerCommand(
+      { id: EditorModeStatusBarContribution.COMMAND_ID, label: 'Mineo: Toggle Editor Mode' },
+      { execute: () => this.modeService.toggle() }
+    );
+
+    // Set initial status bar entry
+    this._updateStatusBar(this.modeService.currentMode);
+
+    // Update on every mode change
+    this.modeService.onModeChange(mode => this._updateStatusBar(mode));
+  }
+
+  private _updateStatusBar(mode: EditorMode): void {
+    this.statusBar.setElement(EditorModeStatusBarContribution.STATUS_BAR_ID, {
+      text: mode === 'neovim' ? '$(terminal) NEOVIM' : '$(edit) MONACO',
+      tooltip: 'Click to toggle editor mode',
+      alignment: StatusBarAlignment.LEFT,
+      priority: 1000,
+      command: EditorModeStatusBarContribution.COMMAND_ID,
+    });
+  }
+}
+
 export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   // ModeService — singleton that owns editor mode state
   bind(ModeService).toSelf().inSingletonScope();
@@ -270,6 +310,9 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
 
   // Register terminal startup contribution
   bind(FrontendApplicationContribution).to(NvimTerminalContribution).inSingletonScope();
+
+  // Register status bar + toggle command contribution
+  bind(FrontendApplicationContribution).to(EditorModeStatusBarContribution).inSingletonScope();
 
   // Suppress breadcrumbs
   try {
