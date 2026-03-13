@@ -18,8 +18,8 @@
     "@theia/cli": "1.69.0"
   },
   "scripts": {
-    "build": "theia build --mode development",
-    "build:prod": "theia build"
+    "build": "tsc && theia build --mode development",
+    "build:prod": "tsc && theia build"
   },
   "theia": {
     "frontend": {
