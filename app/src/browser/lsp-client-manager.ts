@@ -215,10 +215,12 @@ export class LspClientManager implements FrontendApplicationContribution {
         const endpoint = LANG_ENDPOINT[languageId];
         if (!endpoint) return;
         if (this._clients.has(endpoint)) return; // already running
-        this.startClient(endpoint).catch(() => { /* silently ignore */ });
+        this.startClient(languageId).catch(() => { /* silently ignore */ });
     }
 
-    async startClient(endpoint: string): Promise<void> {
+    async startClient(lang: string): Promise<void> {
+        // Resolve the endpoint (e.g. 'typescriptreact' → 'typescript')
+        const endpoint = LANG_ENDPOINT[lang] ?? lang;
         if (this._clients.has(endpoint)) return;
 
         const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -248,7 +250,7 @@ export class LspClientManager implements FrontendApplicationContribution {
         const client = new MonacoLanguageClient({
             name: `Mineo LSP (${endpoint})`,
             clientOptions: {
-                documentSelector: [{ scheme: 'file' }],
+                documentSelector: [{ language: lang, scheme: 'file' }],
             },
             connectionProvider: {
                 get: (_encoding: string) => Promise.resolve(transports),
