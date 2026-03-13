@@ -34,11 +34,14 @@
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
-  background-color: var(--theia-statusBar-background) !important;
-  border-bottom: 1px solid var(--theia-sideBar-background) !important;
-  height: 44px !important; /* Slightly taller for modern look */
+  background: rgba(17, 17, 27, 0.72) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  height: 36px !important;
   padding: 0 10px !important;
-  overflow: visible !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 /* Hide breadcrumbs inside the panel if they are not needed on top */
@@ -53,25 +56,37 @@
   font-size: 13px !important;
 }
 
+/* theia-statusbar (lowercase) is the inline widget in the top panel — keep transparent */
 #theia-statusbar {
-  position: absolute !important;
-  top: 0 !important;
-  right: 10px !important;
-  width: auto !important;
-  height: 44px !important;
-  z-index: 10000 !important;
   background: transparent !important;
   border: none !important;
-  display: flex !important;
-  justify-content: flex-end !important;
-  align-items: center !important;
-  pointer-events: none !important;
 }
 
 #theia-statusbar > * {
-  pointer-events: auto !important;
-  margin-left: 12px !important;
-  font-size: 12px !important;
+  color: rgba(205, 214, 244, 0.45) !important;
+  background: transparent !important;
+  font-size: 11px !important;
+}
+
+/* Status bar — bottom, same frosted glass as top bar */
+#theia-statusBar {
+  background: rgba(17, 17, 27, 0.72) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  color: rgba(205, 214, 244, 0.55) !important;
+}
+
+#theia-statusBar .element,
+#theia-statusBar .area {
+  background: transparent !important;
+  color: rgba(205, 214, 244, 0.55) !important;
+  border: none !important;
+}
+
+#theia-statusBar .element:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(205, 214, 244, 0.85) !important;
 }
 
 /* ── Ultra-Slim Sidebar ─────────────────────────────────────────────────── */
@@ -81,7 +96,78 @@
 }
 
 #theia-left-side-panel {
-    border-right: 1px solid var(--theia-sideBar-background) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Activity bar — leftmost icon strip */
+.theia-app-left .p-TabBar,
+.theia-app-left .lm-TabBar,
+#theia-left-content-panel > .theia-tabBar-separator,
+.theia-sidebar-icon-area {
+  background: rgba(17, 17, 27, 0.55) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Activity bar — narrow strip with small icons */
+:root {
+  --theia-private-sidebar-tab-width: 28px !important;
+  --theia-private-sidebar-tab-height: 28px !important;
+  --theia-private-sidebar-icon-size: 14px !important;
+  --theia-private-sidebar-tab-padding-top-and-bottom: 7px !important;
+  --theia-private-sidebar-tab-padding-left-and-right: 7px !important;
+}
+
+.lm-TabBar.theia-app-sides,
+.theia-sidebar-menu {
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+}
+
+.lm-TabBar.theia-app-sides .lm-TabBar-tab {
+  width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.lm-TabBar.theia-app-sides .lm-TabBar-tabIcon {
+  font-size: 14px !important;
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px !important;
+  mask-size: 14px !important;
+  -webkit-mask-size: 14px !important;
+  background-size: 14px 14px !important;
+  opacity: 0.45;
+  transition: opacity 0.15s;
+}
+
+.lm-TabBar.theia-app-sides .lm-TabBar-tabIcon:hover,
+.lm-TabBar.theia-app-sides .lm-mod-current .lm-TabBar-tabIcon {
+  opacity: 0.9;
+}
+
+/* Settings gear and sidebar menu items */
+.theia-sidebar-menu i,
+.theia-sidebar-menu .theia-sidebar-menu-item i {
+  font-size: 14px !important;
+  padding: 7px !important;
+  width: 28px !important;
+  box-sizing: border-box !important;
+  background: transparent !important;
+}
+
+.theia-sidebar-menu i.theia-compact-menu {
+  font-size: 14px !important;
+}
+
+/* Side panel background */
+.theia-app-left {
+  background: rgba(17, 17, 27, 0.45) !important;
 }
 
 /* Hide the original bottom status bar location */
@@ -131,71 +217,156 @@
   height: 100% !important;
 }
 
-/* ── Touch Toolbar ─────────────────────────────────────────────────────────── */
+/* ── Touch Toolbar — Antigravity ───────────────────────────────────────────── */
 
-/* FAB — floating action button */
+@keyframes fab-breathe {
+  0%, 100% { transform: scale(1);    }
+  50%       { transform: scale(1.04); }
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);    }
+}
+
+@keyframes panel-out {
+  from { opacity: 1; transform: translateY(0)   scale(1);    }
+  to   { opacity: 0; transform: translateY(8px) scale(0.96); }
+}
+
+/* FAB */
 .nvim-touch-fab {
   position: absolute;
   bottom: 16px;
   right: 16px;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: #45475a;         /* catppuccin-mocha surface1 */
-  color: #cdd6f4;               /* catppuccin-mocha text */
-  font-size: 20px;
-  line-height: 44px;
+  background: rgba(17, 17, 27, 0.45);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: rgba(205, 214, 244, 0.75);
+  font-size: 18px;
+  line-height: 40px;
   text-align: center;
   cursor: pointer;
   user-select: none;
-  touch-action: none;           /* let pointer events through */
+  touch-action: none;
   z-index: 100;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  transition: background 0.15s;
+  opacity: 0.35;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 4px 20px rgba(0,0,0,0.35);
+  transition: opacity 0.25s, box-shadow 0.25s, color 0.25s;
+  animation: fab-breathe 4s ease-in-out infinite;
 }
 
+.nvim-touch-fab:hover,
 .nvim-touch-fab:active {
-  background: #585b70;          /* catppuccin-mocha surface2 */
+  opacity: 1;
+  color: rgba(205, 214, 244, 1);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.12), 0 6px 28px rgba(0,0,0,0.5);
+  animation: none;
 }
 
-/* Panel — expands above the FAB */
+/* Panel */
 .nvim-touch-panel {
   position: absolute;
   display: flex;
   flex-direction: row;
-  gap: 8px;
-  padding: 6px 10px;
-  background: #313244;          /* catppuccin-mocha surface0 */
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  gap: 6px;
+  padding: 5px 8px;
+  background: rgba(17, 17, 27, 0.55);
+  backdrop-filter: blur(16px) saturate(1.6);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
   z-index: 101;
   touch-action: none;
+  animation: panel-in 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 .nvim-touch-panel--hidden {
   display: none !important;
 }
 
-/* Individual key buttons */
+/* Buttons */
 .nvim-touch-btn {
-  min-width: 52px;
-  height: 36px;
+  min-width: 48px;
+  height: 32px;
   padding: 0 10px;
   border: none;
-  border-radius: 6px;
-  background: #45475a;          /* catppuccin-mocha surface1 */
-  color: #cdd6f4;
-  font-size: 13px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(205, 214, 244, 0.85);
+  font-size: 12px;
   font-family: inherit;
   font-weight: 600;
+  letter-spacing: 0.04em;
   cursor: pointer;
   touch-action: manipulation;
   user-select: none;
-  transition: background 0.1s;
+  transition: background 0.12s, color 0.12s;
 }
 
-.nvim-touch-btn:active,
+.nvim-touch-btn:active {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
 .nvim-touch-btn--active {
-  background: #89b4fa;          /* catppuccin-mocha blue — active/sticky state */
-  color: #1e1e2f;
+  background: rgba(137, 180, 250, 0.25);
+  color: #89b4fa;
+  border: 1px solid rgba(137, 180, 250, 0.35);
+}
+
+/* ── Menu Bar Collapse/Expand ──────────────────────────────────────────────── */
+
+/* Collapsed state: top panel animates to zero height */
+#theia-top-panel.menu-collapsed {
+  max-height: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+
+/* Smooth transition for collapse/expand */
+#theia-top-panel {
+  max-height: 36px;
+  transition: max-height 0.2s ease, opacity 0.2s ease, padding 0.2s ease;
+}
+
+/* Chevron toggle button — fixed so it survives bar collapse */
+.nvim-menu-toggle {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  z-index: 200;
+  background: rgba(17, 17, 27, 0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: none;
+  border-bottom-right-radius: 6px;
+  color: rgba(205, 214, 244, 0.45);
+  font-size: 11px;
+  line-height: 22px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s, background 0.15s;
+  display: none; /* hidden until contribution mounts it */
+}
+
+.nvim-menu-toggle:hover {
+  color: rgba(205, 214, 244, 0.9);
+  background: rgba(17, 17, 27, 0.75);
+}
+
+/* Only show the toggle button when the menu is collapsed */
+#theia-top-panel.menu-collapsed ~ .nvim-menu-toggle,
+body.nvim-menu-collapsed .nvim-menu-toggle {
+  display: block;
 }
