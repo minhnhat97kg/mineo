@@ -136,7 +136,7 @@ class WsWritableStream {
                     if (typeof data === 'string') {
                         this.ws.send(data);
                     } else {
-                        this.ws.send(data.buffer);
+                        this.ws.send(data);
                     }
                     resolve();
                 } else {
@@ -182,7 +182,12 @@ export class LspClientManager implements FrontendApplicationContribution {
     /** WebSockets kept so we can close them on dispose. */
     private readonly _sockets = new Map<string, WebSocket>();
 
+    /** Endpoints currently being connected (to prevent duplicate startClient races). */
+    private readonly _starting = new Set<string>();
+
     private readonly _toDispose = new DisposableCollection();
+
+    private _stopped = false;
 
     onStart(): void {
         // When switching to neovim mode dispose all LSP clients
@@ -204,6 +209,7 @@ export class LspClientManager implements FrontendApplicationContribution {
     }
 
     onStop(): void {
+        this._stopped = true;
         this.disposeAll();
         this._toDispose.dispose();
     }
@@ -221,7 +227,18 @@ export class LspClientManager implements FrontendApplicationContribution {
     async startClient(lang: string): Promise<void> {
         // Resolve the endpoint (e.g. 'typescriptreact' → 'typescript')
         const endpoint = LANG_ENDPOINT[lang] ?? lang;
-        if (this._clients.has(endpoint)) return;
+        if (this._clients.has(endpoint) || this._starting.has(endpoint)) return;
+
+        this._starting.add(endpoint);
+        try {
+            await this._connect(lang, endpoint);
+        } finally {
+            this._starting.delete(endpoint);
+        }
+    }
+
+    private async _connect(lang: string, endpoint: string): Promise<void> {
+        if (this._stopped) return;
 
         const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
         const url = `${proto}://${window.location.host}/lsp/${endpoint}`;
@@ -236,14 +253,22 @@ export class LspClientManager implements FrontendApplicationContribution {
         this._sockets.set(endpoint, ws);
 
         // Wait for open (or fail silently)
-        await new Promise<void>((resolve, reject) => {
-            ws.addEventListener('open', () => resolve(), { once: true });
-            ws.addEventListener('error', () => reject(new Error(`WebSocket error for ${url}`)), { once: true });
-        }).catch(() => {
-            this._sockets.delete(endpoint);
+        const opened = await new Promise<boolean>((resolve) => {
+            ws.addEventListener('open', () => resolve(true), { once: true });
+            ws.addEventListener('error', () => resolve(false), { once: true });
         });
 
-        if (ws.readyState !== WebSocket.OPEN) return;
+        if (!opened || ws.readyState !== WebSocket.OPEN) {
+            this._sockets.delete(endpoint);
+            return;
+        }
+
+        // Guard: disposeAll may have run while we awaited
+        if (this._stopped) {
+            ws.close();
+            this._sockets.delete(endpoint);
+            return;
+        }
 
         const transports = createWebSocketTransports(ws);
 
@@ -268,19 +293,19 @@ export class LspClientManager implements FrontendApplicationContribution {
     }
 
     disposeAll(): void {
-        for (const [key, client] of this._clients) {
-            try {
-                client.stop();
-            } catch { /* ignore */ }
-            this._clients.delete(key);
+        const clients = new Map(this._clients);
+        const sockets = new Map(this._sockets);
+        this._clients.clear();
+        this._sockets.clear();
+        for (const client of clients.values()) {
+            try { client.stop(); } catch { /* ignore */ }
         }
-        for (const [key, ws] of this._sockets) {
+        for (const ws of sockets.values()) {
             try {
                 if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
                     ws.close();
                 }
             } catch { /* ignore */ }
-            this._sockets.delete(key);
         }
     }
 }
