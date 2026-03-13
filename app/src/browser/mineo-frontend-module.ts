@@ -11,7 +11,7 @@ import { MessageService } from '@theia/core/lib/common/message-service';
 import { TerminalService } from '@theia/terminal/lib/browser/base/terminal-service';
 import URI from '@theia/core/lib/common/uri';
 import { Emitter, Event } from '@theia/core/lib/common/event';
-import { Disposable } from '@theia/core/lib/common/disposable';
+import { Disposable, DisposableCollection } from '@theia/core/lib/common/disposable';
 import { StatusBar, StatusBarAlignment } from '@theia/core/lib/browser/status-bar/status-bar';
 import { CommandRegistry } from '@theia/core/lib/common/command';
 import { EditorWidget } from '@theia/editor/lib/browser/editor-widget';
@@ -272,22 +272,31 @@ class EditorModeStatusBarContribution implements FrontendApplicationContribution
   @inject(ModeService) protected readonly modeService!: ModeService;
   @inject(StatusBar) protected readonly statusBar!: StatusBar;
   @inject(CommandRegistry) protected readonly commands!: CommandRegistry;
+  @inject(MessageService) protected readonly messageService!: MessageService;
 
   private static readonly STATUS_BAR_ID = 'mineo.editorMode';
   private static readonly COMMAND_ID = 'mineo.toggleEditorMode';
+  private readonly _toDispose = new DisposableCollection();
 
   onStart(): void {
-    // Register the toggle command
+    // Register the toggle command — catch async errors so they surface as toasts
     this.commands.registerCommand(
       { id: EditorModeStatusBarContribution.COMMAND_ID, label: 'Mineo: Toggle Editor Mode' },
-      { execute: () => this.modeService.toggle() }
+      { execute: () => this.modeService.toggle().catch(err =>
+          this.messageService.error('Mineo: ' + err)) }
     );
 
     // Set initial status bar entry
     this._updateStatusBar(this.modeService.currentMode);
 
-    // Update on every mode change
-    this.modeService.onModeChange(mode => this._updateStatusBar(mode));
+    // Update on every mode change — store disposable to prevent leak
+    this._toDispose.push(
+      this.modeService.onModeChange(mode => this._updateStatusBar(mode))
+    );
+  }
+
+  onStop(): void {
+    this._toDispose.dispose();
   }
 
   private _updateStatusBar(mode: EditorMode): void {
