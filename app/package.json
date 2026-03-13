@@ -18,8 +18,8 @@
     "@theia/cli": "1.69.0"
   },
   "scripts": {
-    "build": "tsc && theia build --mode development",
-    "build:prod": "tsc && theia build"
+    "build": "tsc && theia build --mode development && webpack --config gen-webpack.config.js",
+    "build:prod": "tsc && theia build && webpack --config gen-webpack.config.js"
   },
   "theia": {
     "frontend": {
