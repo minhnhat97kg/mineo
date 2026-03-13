@@ -141,16 +141,20 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
   }
 
   async onDidInitializeLayout(_app: FrontendApplication): Promise<void> {
-    // Wait until the application reaches 'ready' — this fires AFTER Theia has
-    // fully restored the previous session layout asynchronously.  Activating
-    // before this point causes layout restoration to overwrite our
-    // addWidget/activateWidget, leaving the terminal black on startup.
-    await this.stateService.reachedState('ready');
-    try {
-      await this.modeService.activate(this.modeService.currentMode, { startup: true });
-    } catch (err) {
-      this.messageService.error('Mineo: failed to activate editor mode: ' + err);
-    }
+    // We CANNOT await reachedState('ready') here because this method is called
+    // by fireOnDidInitializeLayout(), and 'ready' is only set AFTER that call
+    // returns — awaiting here would deadlock.
+    //
+    // Instead, return immediately and schedule activation once 'ready' fires.
+    // The one-shot listener on onStateChanged ensures we run exactly once,
+    // after Theia has fully restored the previous session layout.
+    const disposable = this.stateService.onStateChanged(state => {
+      if (state === 'ready') {
+        disposable.dispose();
+        this.modeService.activate(this.modeService.currentMode, { startup: true })
+          .catch(err => this.messageService.error('Mineo: failed to activate editor mode: ' + err));
+      }
+    });
   }
 
   // ── ModeActivator implementation ──────────────────────────────────────────
