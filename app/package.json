@@ -3,6 +3,7 @@
   "name": "mineo-app",
   "version": "1.0.0",
   "dependencies": {
+    "mineo-app": "file:.",
     "@theia/core": "1.69.0",
     "@theia/editor": "1.69.0",
     "@theia/monaco": "1.69.0",
@@ -10,6 +11,7 @@
     "@theia/navigator": "1.69.0",
     "@theia/terminal": "1.69.0",
     "@theia/plugin-ext": "1.69.0",
+    "@theia/plugin-ext-vscode": "1.69.0",
     "@theia/messages": "1.69.0"
   },
   "devDependencies": {
@@ -27,7 +29,7 @@
     },
     "backend": {
       "config": {
-        "frontendConnectionTimeout": -1
+        "frontendConnectionTimeout": 300000
       }
     }
   },
@@ -36,5 +38,6 @@
       "frontend": "lib/browser/mineo-frontend-module",
       "backend": "lib/node/mineo-backend-module"
     }
-  ]
+  ],
+  "theiaPluginsDir": "../plugins"
 }
