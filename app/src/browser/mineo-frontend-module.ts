@@ -20,7 +20,7 @@ import { CommandRegistry } from '@theia/core/lib/common/command';
 import { EditorWidget } from '@theia/editor/lib/browser/editor-widget';
 import { EditorManager } from '@theia/editor/lib/browser';
 import { TerminalWidget } from '@theia/terminal/lib/browser/base/terminal-widget';
-import { Widget } from '@theia/core/lib/browser/widgets/widget';
+import { Widget, waitForRevealed } from '@theia/core/lib/browser/widgets/widget';
 import { SocketWriteBuffer } from '@theia/core/lib/common/messaging/socket-write-buffer';
 
 // Increase disconnected buffer size to 50MB (default is 100KB)
@@ -182,6 +182,11 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
       }
       this.shell.addWidget(this.nvimWidget!, { area: 'main' });
       this.shell.activateWidget(this.nvimWidget!.id);
+      // Wait until the widget is actually visible in the DOM, then trigger
+      // an update so xterm.js runs open()+fit() and paints the terminal.
+      // Without this, the terminal stays black until the next resize event.
+      await waitForRevealed(this.nvimWidget!);
+      this.nvimWidget!.update();
     } catch (err) {
       // Rollback: if we just created the widget, dispose it (it may not be in
       // the shell yet, so dispose() is safer than closeWidget())
