@@ -227,36 +227,36 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
 }
 
 /**
- * NvimOpenHandler intercepts file-open events from the File Explorer and
- * forwards them to the running Neovim instance via /api/nvim-open.
+ * NvimOpenHandler intercepts file-open events from the File Explorer.
+ * In neovim mode: forwards to /api/nvim-open with priority 500.
+ * In monaco mode: returns -1 (opts out; Theia uses default Monaco handler).
  */
 @injectable()
 class NvimOpenHandler implements OpenHandler {
   readonly id = 'mineo.nvim-open';
   readonly label = 'Open in Neovim';
 
-  constructor(
-    @inject(MessageService) protected readonly messageService: MessageService
-  ) { }
+  @inject(MessageService) protected readonly messageService!: MessageService;
+  @inject(ModeService) protected readonly modeService!: ModeService;
 
   canHandle(uri: URI): number {
-    // Intercept file:// scheme with highest priority
-    return uri.scheme === 'file' ? 20000 : 0;
+    if (uri.scheme !== 'file') return -1;
+    return this.modeService.currentMode === 'neovim' ? 500 : -1;
   }
 
   async open(uri: URI): Promise<object | undefined> {
     const filePath = uri.path.toString();
     try {
-      const res = await fetch(`/api/nvim-open?file=${encodeURIComponent(filePath)}`);
+      const res = await fetch('/api/nvim-open?file=' + encodeURIComponent(filePath));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const msg = (body as any).error || `HTTP ${res.status}`;
-        this.messageService.warn(`Neovim: ${msg}`);
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        this.messageService.warn('Neovim: ' + (body.error ?? 'HTTP ' + res.status));
+        return undefined; // let Theia fall back to other handlers
       }
     } catch (e) {
-      this.messageService.error(`Could not reach /api/nvim-open: ${e}`);
+      this.messageService.error('Could not reach /api/nvim-open: ' + e);
+      return undefined;
     }
-    // Return a value to signal to Theia that we've handled the open request
     return { handled: true };
   }
 }
