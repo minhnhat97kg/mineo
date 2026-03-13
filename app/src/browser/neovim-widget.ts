@@ -118,7 +118,7 @@ export class NvimWidget extends BaseWidget {
 
             // Touch support — only attach when a touch device is detected
             if (window.matchMedia('(pointer: coarse)').matches) {
-                const gestureHandler = new TouchGestureHandler(this.node, this.term);
+                const gestureHandler = new TouchGestureHandler(this.node, this.term, () => this.fitAndResize());
                 this.toDispose.push(gestureHandler);
 
                 const enc = new TextEncoder();

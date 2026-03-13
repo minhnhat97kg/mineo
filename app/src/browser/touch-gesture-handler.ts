@@ -11,6 +11,8 @@ export class TouchGestureHandler implements Disposable {
     private readonly toDispose = new DisposableCollection();
     private touchStartY = 0;
     private touchStartX = 0;
+    private touchOriginY = 0;
+    private touchOriginX = 0;
     private initialPinchDistance = 0;
     private initialFontSize = 14;
     private isPinching = false;
@@ -18,6 +20,7 @@ export class TouchGestureHandler implements Disposable {
     constructor(
         private readonly node: HTMLElement,
         private readonly term: Terminal,
+        private readonly onFontSizeChange?: () => void,
     ) {
         this.attach();
     }
@@ -29,7 +32,7 @@ export class TouchGestureHandler implements Disposable {
 
         this.node.addEventListener('touchstart', onTouchStart, { passive: false });
         this.node.addEventListener('touchmove',  onTouchMove,  { passive: false });
-        this.node.addEventListener('touchend',   onTouchEnd,   { passive: false });
+        this.node.addEventListener('touchend',   onTouchEnd,   { passive: true });
 
         this.toDispose.push(Disposable.create(() => {
             this.node.removeEventListener('touchstart', onTouchStart);
@@ -43,6 +46,8 @@ export class TouchGestureHandler implements Disposable {
             this.isPinching = false;
             this.touchStartY = e.touches[0].clientY;
             this.touchStartX = e.touches[0].clientX;
+            this.touchOriginY = e.touches[0].clientY;
+            this.touchOriginX = e.touches[0].clientX;
         } else if (e.touches.length === 2) {
             this.isPinching = true;
             this.initialPinchDistance = this.getPinchDistance(e);
@@ -59,6 +64,7 @@ export class TouchGestureHandler implements Disposable {
             const newSize = Math.round(this.initialFontSize * scale);
             const clamped = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, newSize));
             this.term.options.fontSize = clamped;
+            this.onFontSizeChange?.();
             return;
         }
 
@@ -77,9 +83,9 @@ export class TouchGestureHandler implements Disposable {
 
     private handleTouchEnd(e: TouchEvent): void {
         if (!this.isPinching && e.changedTouches.length === 1) {
-            const dx = Math.abs(e.changedTouches[0].clientX - this.touchStartX);
-            const dy = Math.abs(e.changedTouches[0].clientY - this.touchStartY);
-            if (dx < 10 && dy < 10) {
+            const dx = Math.abs(e.changedTouches[0].clientX - this.touchOriginX);
+            const dy = Math.abs(e.changedTouches[0].clientY - this.touchOriginY);
+            if (dx < SWIPE_THRESHOLD_PX && dy < SWIPE_THRESHOLD_PX) {
                 // It was a tap — focus the terminal
                 this.term.focus();
             }

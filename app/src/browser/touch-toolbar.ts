@@ -13,7 +13,6 @@ export class TouchToolbar implements Disposable {
     private panelOpen = false;
 
     // Drag state
-    private dragging = false;
     private dragOffsetX = 0;
     private dragOffsetY = 0;
 
@@ -46,15 +45,15 @@ export class TouchToolbar implements Disposable {
 
         // ── FAB: tap to toggle, drag to reposition ────────────────────────────
         let dragMoved = false;
-        let pointerDownTime = 0;
-
         let dragging = false;
+        let pointerDownClientX = 0;
+        let pointerDownClientY = 0;
 
         const onPointerDown = (e: PointerEvent) => {
             dragging = false;
             dragMoved = false;
-            pointerDownTime = Date.now();
-            this.dragging = false;
+            pointerDownClientX = e.clientX;
+            pointerDownClientY = e.clientY;
             this.dragOffsetX = e.clientX - this.fab.getBoundingClientRect().left;
             this.dragOffsetY = e.clientY - this.fab.getBoundingClientRect().top;
             this.fab.setPointerCapture(e.pointerId);
@@ -62,12 +61,11 @@ export class TouchToolbar implements Disposable {
         const onPointerMove = (e: PointerEvent) => {
             if (!this.fab.hasPointerCapture(e.pointerId)) return;
             const moved =
-                Math.abs(e.clientX - (this.fab.getBoundingClientRect().left + this.dragOffsetX)) > 5 ||
-                Math.abs(e.clientY - (this.fab.getBoundingClientRect().top  + this.dragOffsetY)) > 5;
+                Math.abs(e.clientX - pointerDownClientX) > 5 ||
+                Math.abs(e.clientY - pointerDownClientY) > 5;
             if (moved || dragging) {
                 dragging = true;
                 dragMoved = true;
-                this.dragging = true;
                 const rect = this.container.getBoundingClientRect();
                 const x = e.clientX - rect.left - this.dragOffsetX;
                 const y = e.clientY - rect.top  - this.dragOffsetY;
@@ -89,7 +87,6 @@ export class TouchToolbar implements Disposable {
                 this.togglePanel();
             }
             dragging = false;
-            this.dragging = false;
         };
 
         this.fab.addEventListener('pointerdown', onPointerDown);
@@ -124,11 +121,19 @@ export class TouchToolbar implements Disposable {
     private positionPanel(): void {
         const fabRect = this.fab.getBoundingClientRect();
         const containerRect = this.container.getBoundingClientRect();
-        // Place panel above the FAB
-        const top  = fabRect.top  - containerRect.top  - 48;
-        const left = fabRect.left - containerRect.left;
-        this.panel.style.top  = Math.max(0, top)  + 'px';
-        this.panel.style.left = Math.max(0, left) + 'px';
+        const PANEL_HEIGHT = 48;
+        const MARGIN = 4;
+        const fabTopInContainer = fabRect.top - containerRect.top;
+        // Prefer above; fall back to below if not enough room
+        let top: number;
+        if (fabTopInContainer - PANEL_HEIGHT - MARGIN >= 0) {
+            top = fabTopInContainer - PANEL_HEIGHT - MARGIN;
+        } else {
+            top = fabTopInContainer + this.fab.offsetHeight + MARGIN;
+        }
+        const left = Math.max(0, fabRect.left - containerRect.left);
+        this.panel.style.top  = top + 'px';
+        this.panel.style.left = left + 'px';
     }
 
     private toggleCtrl(btn: HTMLElement): void {
