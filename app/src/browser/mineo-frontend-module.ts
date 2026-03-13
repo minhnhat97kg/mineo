@@ -21,6 +21,7 @@ import { SocketWriteBuffer } from '@theia/core/lib/common/messaging/socket-write
 import { ServiceConnectionProvider, RemoteConnectionProvider } from '@theia/core/lib/browser/messaging/service-connection-provider';
 import { FileNavigatorContribution } from '@theia/navigator/lib/browser/navigator-contribution';
 import { NvimWidget } from './neovim-widget';
+import { LspClientManager } from './lsp-client-manager';
 
 // Increase disconnected buffer size to 50MB (default is 100KB)
 // to prevent "Max disconnected buffer size exceeded" errors when backgrounded
@@ -65,7 +66,7 @@ interface ModeActivator {
  *   (NvimTerminalContribution calls this in its onStart).
  */
 @injectable()
-class ModeService {
+export class ModeService {
   private _currentMode: EditorMode;
   private readonly _onModeChange = new Emitter<EditorMode>();
   readonly onModeChange: Event<EditorMode> = this._onModeChange.event;
@@ -442,6 +443,10 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
 
   // Menu bar collapse/expand toggle
   bind(FrontendApplicationContribution).to(MenuBarToggleContribution).inSingletonScope();
+
+  // LSP client manager — starts Monaco language clients for supported files
+  bind(LspClientManager).toSelf().inSingletonScope();
+  bind(FrontendApplicationContribution).to(LspClientManager).inSingletonScope();
 
   // Suppress breadcrumbs
   try {
