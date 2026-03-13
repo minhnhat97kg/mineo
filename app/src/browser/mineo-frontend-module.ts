@@ -137,6 +137,13 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
   }
 
   async onDidInitializeLayout(_app: FrontendApplication): Promise<void> {
+    // Defer one event-loop tick so Theia's layout restoration (which runs
+    // synchronously as part of initializeLayout) has fully settled before
+    // we add and activate the nvim terminal widget.  Without this, Theia
+    // overwrites our addWidget/activateWidget call when it restores the
+    // previous session's layout, leaving the widget invisible until the
+    // user manually toggles the mode.
+    await new Promise(resolve => setTimeout(resolve, 0));
     try {
       await this.modeService.activate(this.modeService.currentMode, { startup: true });
     } catch (err) {
