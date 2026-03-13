@@ -12,6 +12,10 @@ import { TerminalService } from '@theia/terminal/lib/browser/base/terminal-servi
 import URI from '@theia/core/lib/common/uri';
 import { Emitter, Event } from '@theia/core/lib/common/event';
 import { Disposable } from '@theia/core/lib/common/disposable';
+import { EditorWidget } from '@theia/editor/lib/browser/editor-widget';
+import { EditorManager } from '@theia/editor/lib/browser';
+import { TerminalWidget } from '@theia/terminal/lib/browser/base/terminal-widget';
+import { Widget } from '@theia/core/lib/browser/widgets/widget';
 import { SocketWriteBuffer } from '@theia/core/lib/common/messaging/socket-write-buffer';
 
 // Increase disconnected buffer size to 50MB (default is 100KB)
@@ -113,29 +117,113 @@ class NoOpBreadcrumbsContribution implements BreadcrumbsContribution {
 }
 
 /**
- * NvimTerminalContribution starts Neovim in a terminal and moves it to the main area
- * automatically on application startup.
+ * NvimTerminalContribution manages the Neovim terminal widget lifecycle.
+ * It implements ModeActivator so ModeService can trigger widget operations.
  */
 @injectable()
-class NvimTerminalContribution implements FrontendApplicationContribution {
+class NvimTerminalContribution implements FrontendApplicationContribution, ModeActivator {
   @inject(TerminalService) protected readonly terminalService!: TerminalService;
   @inject(ApplicationShell) protected readonly shell!: ApplicationShell;
+  @inject(ModeService) protected readonly modeService!: ModeService;
+  @inject(EditorManager) protected readonly editorManager!: EditorManager;
+  @inject(MessageService) protected readonly messageService!: MessageService;
+
+  private nvimWidget: TerminalWidget | undefined;
+
+  onStart(): void {
+    this.modeService.registerActivator(this);
+  }
 
   async onDidInitializeLayout(_app: FrontendApplication): Promise<void> {
-    // Try to find if Neovim is already running, otherwise spawn it
-    let widget = this.terminalService.all.find(t => t.title.label === 'Neovim');
-    if (!widget) {
-      widget = await this.terminalService.newTerminal({
-        title: 'Neovim',
-        shellPath: 'nvim'
-      });
+    try {
+      await this.modeService.activate(this.modeService.currentMode, { startup: true });
+    } catch (err) {
+      this.messageService.error('Mineo: failed to activate editor mode: ' + err);
+    }
+  }
+
+  // ── ModeActivator implementation ──────────────────────────────────────────
+
+  async activateNeovimMode(startup: boolean): Promise<void> {
+    // Step 0: dirty-check (skipped on startup — no user-created editor state yet)
+    // EditorManager has no getDirtyEditors() method in Theia 1.x — use .all + saveable.dirty
+    if (!startup) {
+      const dirty = this.editorManager.all.filter(w => w.saveable.dirty);
+      if (dirty.length > 0) {
+        throw new Error('Save or discard Monaco changes before switching to Neovim.');
+      }
     }
 
-    if (widget) {
-      // Move the terminal widget to the 'main' area where Monaco usually lives
-      this.shell.addWidget(widget, { area: 'main' });
-      this.shell.activateWidget(widget.id);
+    // Step 1: create or reuse the nvim terminal widget
+    const created = !this.nvimWidget || this.nvimWidget.isDisposed;
+    try {
+      if (created) {
+        this.nvimWidget = await this.terminalService.newTerminal({
+          title: 'Neovim',
+          shellPath: '/bin/sh',
+          shellArgs: ['-c', 'exec nvim --listen /tmp/nvim.sock'],
+          env: {},
+        });
+      }
+      this.shell.addWidget(this.nvimWidget!, { area: 'main' });
+      this.shell.activateWidget(this.nvimWidget!.id);
+    } catch (err) {
+      // Rollback: if we just created the widget, dispose it
+      if (created && this.nvimWidget) {
+        this.shell.closeWidget(this.nvimWidget.id);
+        this.nvimWidget = undefined;
+      }
+      throw err;
     }
+
+    // Step 2: close Monaco editor widgets from the main panel (skipped on startup)
+    // We close EditorWidget instances only — not terminal panels, diff viewers, etc.
+    if (!startup) {
+      const mainWidgets = (this.shell.mainPanel as any).widgets as ReadonlyArray<Widget>;
+      for (const w of mainWidgets) {
+        if (w instanceof EditorWidget) {
+          this.shell.closeWidget(w.id);
+        }
+      }
+    }
+
+    // Step 3: poll /api/nvim-ready (non-fatal; never throws)
+    await this._waitForNvimReady();
+  }
+
+  async activateMonacoMode(): Promise<void> {
+    // Hide the nvim widget if it exists
+    if (this.nvimWidget && !this.nvimWidget.isDisposed) {
+      try {
+        (this.shell as any).hideWidget(this.nvimWidget.id);
+      } catch (err) {
+        throw err;
+      }
+    }
+    // Monaco area is already empty — NvimOpenHandler returns -1 in monaco mode
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────────────
+
+  private async _waitForNvimReady(): Promise<void> {
+    const POLL_MS = 200;
+    const MAX_POLLS = 25; // 5 seconds total
+    for (let i = 0; i < MAX_POLLS; i++) {
+      try {
+        const res = await fetch('/api/nvim-ready');
+        if (res.ok) {
+          const body = await res.json() as { ready: boolean };
+          if (body.ready) return;
+        }
+      } catch {
+        // Network error — treat as "not ready yet"
+      }
+      await new Promise(resolve => setTimeout(resolve, POLL_MS));
+    }
+    // Timeout — non-fatal toast
+    this.messageService.warn(
+      'Neovim socket not ready — file opens may not work until nvim initialises.'
+    );
   }
 }
 
