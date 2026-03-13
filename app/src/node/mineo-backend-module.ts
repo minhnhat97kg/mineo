@@ -3,6 +3,7 @@ import {
   BackendApplicationContribution,
   BackendApplicationServer,
 } from '@theia/core/lib/node/backend-application';
+import { MessagingService } from '@theia/core/lib/node/messaging/messaging-service';
 import { SocketWriteBuffer } from '@theia/core/lib/common/messaging/socket-write-buffer';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -14,6 +15,8 @@ import { loadConfig } from './config';
 import { loadOrCreateSecret } from './secret';
 import { registerAuth, registerAuthWS } from './auth';
 import { checkNvimReady } from './nvim-ready';
+import { NeovimPtyContribution } from './neovim-pty-contribution';
+import { LspServerManager } from './lsp-server-manager';
 
 // __dirname at @theia/cli runtime: <root>/app/lib/node/
 // Three levels up: <root>/
@@ -84,7 +87,7 @@ class MineoBACContribution implements BackendApplicationContribution {
         res.status(400).json({ error: 'Invalid path' });
         return;
       }
-      const NVIM_SOCK = '/tmp/nvim.sock';
+      const NVIM_SOCK = '/tmp/mineo-nvim.sock';
       const RETRY_MS = 500;
       const MAX_ATTEMPTS = 20; // up to 10 seconds
       let lastErr: any;
@@ -161,4 +164,7 @@ export default new ContainerModule((bind) => {
   // Binding BackendApplicationServer prevents server.js from binding the default
   // static-only server and lets us control middleware order.
   bind(BackendApplicationServer).to(MineoBASServer).inSingletonScope();
+  // Neovim PTY — MessagingService.Contribution that spawns nvim and pipes I/O
+  bind(MessagingService.Contribution).to(NeovimPtyContribution).inSingletonScope();
+  bind(BackendApplicationContribution).to(LspServerManager).inSingletonScope();
 });
