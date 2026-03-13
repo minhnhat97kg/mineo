@@ -21,8 +21,6 @@ import { checkNvimReady } from './nvim-ready';
 // overwriting the developer's real config.json).
 const CONFIG_PATH = process.env.MINEO_CONFIG || path.resolve(__dirname, '../../../config.json');
 const SECRET_PATH = path.resolve(__dirname, '../../../.secret');
-const VSIX_PATH = path.resolve(__dirname, '../../../plugins/vscode-neovim.vsix');
-// Static frontend files are in app/lib/frontend after `theia build`
 const FRONTEND_DIR = path.resolve(__dirname, '../../lib/frontend');
 
 // Increase disconnected buffer size to 50MB (default is 100KB)
@@ -52,13 +50,6 @@ try {
   process.exit(1);
 }
 
-// Warn if vsix missing (non-fatal — plugin host will fail gracefully)
-if (!fs.existsSync(VSIX_PATH)) {
-  process.stderr.write(
-    '[mineo] vscode-neovim plugin not found. Run: npm run download-plugins\n'
-  );
-}
-
 // secret is loaded here so MineoBASServer.configure() can use it immediately.
 // loadOrCreateSecret exits fatally if .secret is unwritable.
 const secret = loadOrCreateSecret(SECRET_PATH);
@@ -80,8 +71,9 @@ class MineoBACContribution implements BackendApplicationContribution {
 
     // /api/nvim-open?file=<abs-path>
     // Sends a file to the running Neovim instance via its RPC socket.
-    // The frontend calls this when a file is clicked in the File Explorer.
-    app.get('/api/nvim-open', (req, res) => {
+    // Retries for up to 10s to handle the startup race where nvim is still
+    // initialising when the first file-open request arrives.
+    app.get('/api/nvim-open', async (req, res) => {
       const file = req.query['file'];
       if (typeof file !== 'string' || !file) {
         res.status(400).json({ error: 'Missing file param' });
@@ -93,16 +85,26 @@ class MineoBACContribution implements BackendApplicationContribution {
         return;
       }
       const NVIM_SOCK = '/tmp/nvim.sock';
-      try {
-        execSync(`"${cfg.nvim.bin}" --server "${NVIM_SOCK}" --remote-silent "${file}"`, {
-          timeout: 3000,
-          stdio: 'ignore',
-        });
-        res.json({ ok: true });
-      } catch (err: any) {
-        // Socket not found = Neovim isn't running yet in the terminal
-        res.status(503).json({ error: 'Neovim not running. Open a terminal and run: nvim', detail: err.message });
+      const RETRY_MS = 500;
+      const MAX_ATTEMPTS = 20; // up to 10 seconds
+      let lastErr: any;
+      for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        try {
+          execSync(`"${cfg.nvim.bin}" --server "${NVIM_SOCK}" --remote-silent "${file}"`, {
+            timeout: 3000,
+            stdio: 'ignore',
+          });
+          res.json({ ok: true });
+          return;
+        } catch (err: any) {
+          lastErr = err;
+          // Only retry if the socket doesn't exist yet (nvim still starting)
+          if (i < MAX_ATTEMPTS - 1) {
+            await new Promise(resolve => setTimeout(resolve, RETRY_MS));
+          }
+        }
       }
+      res.status(503).json({ error: 'Neovim not running after 10s', detail: lastErr?.message });
     });
 
     // /api/nvim-ready — always returns HTTP 200, even on unexpected errors
