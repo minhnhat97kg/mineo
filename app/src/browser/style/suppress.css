@@ -38,10 +38,11 @@
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
-  height: 36px !important;
+  max-height: 36px;
   padding: 0 10px !important;
   visibility: visible !important;
   opacity: 1 !important;
+  transition: max-height 0.2s ease, opacity 0.2s ease, padding 0.2s ease;
 }
 
 /* Hide breadcrumbs inside the panel if they are not needed on top */
@@ -331,12 +332,6 @@
   overflow: hidden !important;
 }
 
-/* Smooth transition for collapse/expand */
-#theia-top-panel {
-  max-height: 36px;
-  transition: max-height 0.2s ease, opacity 0.2s ease, padding 0.2s ease;
-}
-
 /* Chevron toggle button — fixed so it survives bar collapse */
 .nvim-menu-toggle {
   position: fixed;
@@ -366,7 +361,6 @@
 }
 
 /* Only show the toggle button when the menu is collapsed */
-#theia-top-panel.menu-collapsed ~ .nvim-menu-toggle,
 body.nvim-menu-collapsed .nvim-menu-toggle {
   display: block;
 }
