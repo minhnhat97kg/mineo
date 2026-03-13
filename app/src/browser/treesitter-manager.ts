@@ -108,6 +108,7 @@ export class TreesitterManager implements FrontendApplicationContribution {
 
     private _initialize(): void {
         if (this._initialized) return;
+        this._initialized = true; // guard re-entry immediately before any async work
 
         Parser.init({ locateFile: () => '/grammars/tree-sitter.wasm' })
             .then(() => {
@@ -164,7 +165,14 @@ export class TreesitterManager implements FrontendApplicationContribution {
                         }
                     }
 
-                    walk(tree.rootNode);
+                    try {
+                        walk(tree.rootNode);
+                    } finally {
+                        // Must call tree.delete() — web-tree-sitter allocates in WASM
+                        // heap which is not GC'd; leaking trees causes OOM on large files.
+                        tree.delete();
+                    }
+
                     tokens.sort((a, b) => a.startIndex - b.startIndex);
 
                     return { tokens, endState: state };
