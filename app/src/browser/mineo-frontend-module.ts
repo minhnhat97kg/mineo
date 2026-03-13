@@ -182,10 +182,12 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
       }
       this.shell.addWidget(this.nvimWidget!, { area: 'main' });
       this.shell.activateWidget(this.nvimWidget!.id);
-      // Wait until the widget is actually visible in the DOM, then trigger
-      // an update so xterm.js runs open()+fit() and paints the terminal.
-      // Without this, the terminal stays black until the next resize event.
+      // Wait until the widget is genuinely visible, then force a resize so
+      // xterm.js runs fitAddon.fit() and paints the terminal content.
+      // We must set needsResize=true first because onUpdateRequest only calls
+      // resizeTerminal() when that flag is set; open() alone leaves it blank.
       await waitForRevealed(this.nvimWidget!);
+      (this.nvimWidget as any).needsResize = true;
       this.nvimWidget!.update();
     } catch (err) {
       // Rollback: if we just created the widget, dispose it (it may not be in
