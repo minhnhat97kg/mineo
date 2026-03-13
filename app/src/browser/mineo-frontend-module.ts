@@ -8,6 +8,7 @@ import { BreadcrumbsContribution, Breadcrumb } from '@theia/core/lib/browser/bre
 import { MenuContribution, MenuModelRegistry } from '@theia/core/lib/common/menu';
 import { ApplicationShellOptions, ApplicationShell } from '@theia/core/lib/browser/shell/application-shell';
 import { FrontendApplicationContribution, FrontendApplication } from '@theia/core/lib/browser';
+import { FrontendApplicationStateService } from '@theia/core/lib/browser/frontend-application-state';
 import { OpenHandler } from '@theia/core/lib/browser/opener-service';
 import { MessageService } from '@theia/core/lib/common/message-service';
 import { TerminalService } from '@theia/terminal/lib/browser/base/terminal-service';
@@ -131,6 +132,7 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
   @inject(ModeService) protected readonly modeService!: ModeService;
   @inject(EditorManager) protected readonly editorManager!: EditorManager;
   @inject(MessageService) protected readonly messageService!: MessageService;
+  @inject(FrontendApplicationStateService) protected readonly stateService!: FrontendApplicationStateService;
 
   private nvimWidget: TerminalWidget | undefined;
 
@@ -139,13 +141,11 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
   }
 
   async onDidInitializeLayout(_app: FrontendApplication): Promise<void> {
-    // Defer one event-loop tick so Theia's layout restoration (which runs
-    // synchronously as part of initializeLayout) has fully settled before
-    // we add and activate the nvim terminal widget.  Without this, Theia
-    // overwrites our addWidget/activateWidget call when it restores the
-    // previous session's layout, leaving the widget invisible until the
-    // user manually toggles the mode.
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Wait until the application reaches 'ready' — this fires AFTER Theia has
+    // fully restored the previous session layout asynchronously.  Activating
+    // before this point causes layout restoration to overwrite our
+    // addWidget/activateWidget, leaving the terminal black on startup.
+    await this.stateService.reachedState('ready');
     try {
       await this.modeService.activate(this.modeService.currentMode, { startup: true });
     } catch (err) {
