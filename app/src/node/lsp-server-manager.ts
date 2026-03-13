@@ -46,16 +46,26 @@ export class LspServerManager implements BackendApplicationContribution {
   }
 
   private handleConnection(ws: WebSocket, lang: string, cmd: string[]): void {
-    let proc = this.servers.get(lang);
-
-    if (!proc || proc.exitCode !== null) {
-      proc = this.spawnServer(lang, cmd);
+    // Use map membership as the single source of truth for process liveness.
+    // The 'exit'/'error' handlers delete the entry when the process dies.
+    if (!this.servers.has(lang)) {
+      try {
+        this.spawnServer(lang, cmd);
+      } catch (err) {
+        console.error(`[LspServerManager] ${lang} spawn failed:`, err);
+        ws.close(1011, 'Language server failed to start');
+        return;
+      }
     }
+    const proc = this.servers.get(lang)!;
 
     // WebSocket message → lang server stdin
     ws.on('message', (data) => {
-      if (proc && proc.stdin && proc.exitCode === null) {
-        proc.stdin.write(data instanceof Buffer ? data : Buffer.from(data as unknown as string));
+      if (proc.stdin && this.servers.has(lang)) {
+        const buf = data instanceof Buffer ? data
+                  : data instanceof ArrayBuffer ? Buffer.from(data)
+                  : Buffer.concat(data as Buffer[]);
+        proc.stdin.write(buf);
       }
     });
 
@@ -68,7 +78,7 @@ export class LspServerManager implements BackendApplicationContribution {
     proc.stdout!.on('data', onData);
 
     ws.on('close', () => {
-      proc!.stdout!.off('data', onData);
+      proc.stdout!.off('data', onData);
       // Keep the server process alive for reconnects
     });
   }
@@ -93,5 +103,9 @@ export class LspServerManager implements BackendApplicationContribution {
 
     this.servers.set(lang, proc);
     return proc;
+  }
+
+  onStop(): void {
+    this.wss.close();
   }
 }
