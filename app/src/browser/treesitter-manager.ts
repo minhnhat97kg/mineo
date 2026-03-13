@@ -122,6 +122,8 @@ export class TreesitterManager implements FrontendApplicationContribution {
             })
             .catch(err => {
                 console.warn('[TreesitterManager] init failed — falling back to Monaco tokenizer:', err);
+                // Mark as initialized so we don't retry on every subsequent mode switch
+                this._initialized = true;
             });
     }
 
