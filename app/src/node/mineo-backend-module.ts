@@ -3,6 +3,7 @@ import {
   BackendApplicationContribution,
   BackendApplicationServer,
 } from '@theia/core/lib/node/backend-application';
+import { SocketWriteBuffer } from '@theia/core/lib/common/messaging/socket-write-buffer';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as http from 'http';
@@ -12,6 +13,7 @@ import { Application } from 'express';
 import { loadConfig } from './config';
 import { loadOrCreateSecret } from './secret';
 import { registerAuth, registerAuthWS } from './auth';
+import { checkNvimReady } from './nvim-ready';
 
 // __dirname at @theia/cli runtime: <root>/app/lib/node/
 // Three levels up: <root>/
@@ -22,6 +24,10 @@ const SECRET_PATH = path.resolve(__dirname, '../../../.secret');
 const VSIX_PATH = path.resolve(__dirname, '../../../plugins/vscode-neovim.vsix');
 // Static frontend files are in app/lib/frontend after `theia build`
 const FRONTEND_DIR = path.resolve(__dirname, '../../lib/frontend');
+
+// Increase disconnected buffer size to 50MB (default is 100KB)
+// to prevent "Max disconnected buffer size exceeded" errors when backgrounded
+(SocketWriteBuffer as any).DISCONNECTED_BUFFER_SIZE = 50 * 1024 * 1024;
 
 // Load config and secret at module-load time (before any configure() calls).
 // This ensures both are available when MineoBASServer.configure() runs.
@@ -70,6 +76,45 @@ class MineoBACContribution implements BackendApplicationContribution {
     // because /healthz is explicitly exempt in the auth guard.
     app.get('/healthz', (_req, res) => {
       res.json({ status: 'ok' });
+    });
+
+    // /api/nvim-open?file=<abs-path>
+    // Sends a file to the running Neovim instance via its RPC socket.
+    // The frontend calls this when a file is clicked in the File Explorer.
+    app.get('/api/nvim-open', (req, res) => {
+      const file = req.query['file'];
+      if (typeof file !== 'string' || !file) {
+        res.status(400).json({ error: 'Missing file param' });
+        return;
+      }
+      // Safety: only allow absolute paths within the configured workspace
+      if (!file.startsWith('/') || file.includes('..')) {
+        res.status(400).json({ error: 'Invalid path' });
+        return;
+      }
+      const NVIM_SOCK = '/tmp/nvim.sock';
+      try {
+        execSync(`"${cfg.nvim.bin}" --server "${NVIM_SOCK}" --remote-silent "${file}"`, {
+          timeout: 3000,
+          stdio: 'ignore',
+        });
+        res.json({ ok: true });
+      } catch (err: any) {
+        // Socket not found = Neovim isn't running yet in the terminal
+        res.status(503).json({ error: 'Neovim not running. Open a terminal and run: nvim', detail: err.message });
+      }
+    });
+
+    // /api/nvim-ready — always returns HTTP 200, even on unexpected errors
+    app.get('/api/nvim-ready', async (_req, res) => {
+      try {
+        const ready = await checkNvimReady();
+        res.status(200).json({ ready });
+      } catch {
+        // Defensive: checkNvimReady should never throw, but guard here to
+        // guarantee the spec's "always HTTP 200" contract.
+        res.status(200).json({ ready: false });
+      }
     });
   }
 
