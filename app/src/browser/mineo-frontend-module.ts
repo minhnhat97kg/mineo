@@ -2,6 +2,8 @@ import '../../src/browser/style/suppress.css';
 import '../../src/browser/style/theme.css';
 
 import { ContainerModule, injectable, inject } from '@theia/core/shared/inversify';
+import { ColorContribution } from '@theia/core/lib/browser/color-application-contribution';
+import { ColorRegistry } from '@theia/core/lib/browser/color-registry';
 import { BreadcrumbsContribution, Breadcrumb } from '@theia/core/lib/browser/breadcrumbs/breadcrumbs-constants';
 import { MenuContribution, MenuModelRegistry } from '@theia/core/lib/common/menu';
 import { ApplicationShellOptions, ApplicationShell } from '@theia/core/lib/browser/shell/application-shell';
@@ -320,9 +322,51 @@ class EditorModeStatusBarContribution implements FrontendApplicationContribution
   }
 }
 
+// ─── Terminal Color Theme ───────────────────────────────────────────────────
+
+/**
+ * Registers One Dark Pro ANSI terminal colors so xterm.js renders Neovim
+ * with the same palette as it appears in a native terminal with this theme.
+ * Colors sourced from: https://github.com/Binaryify/OneDark-Pro
+ */
+@injectable()
+class OneDarkTerminalColors implements ColorContribution {
+  registerColors(colors: ColorRegistry): void {
+    const oneDark: Record<string, string> = {
+      'terminal.background':            '#282c34',
+      'terminal.foreground':            '#abb2bf',
+      'terminalCursor.foreground':      '#528bff',
+      'terminalCursor.background':      '#282c34',
+      'terminal.selectionBackground':   '#3e4451',
+      'terminal.ansiBlack':             '#282c34',
+      'terminal.ansiRed':               '#e06c75',
+      'terminal.ansiGreen':             '#98c379',
+      'terminal.ansiYellow':            '#e5c07b',
+      'terminal.ansiBlue':              '#61afef',
+      'terminal.ansiMagenta':           '#c678dd',
+      'terminal.ansiCyan':              '#56b6c2',
+      'terminal.ansiWhite':             '#abb2bf',
+      'terminal.ansiBrightBlack':       '#5c6370',
+      'terminal.ansiBrightRed':         '#e06c75',
+      'terminal.ansiBrightGreen':       '#98c379',
+      'terminal.ansiBrightYellow':      '#e5c07b',
+      'terminal.ansiBrightBlue':        '#61afef',
+      'terminal.ansiBrightMagenta':     '#c678dd',
+      'terminal.ansiBrightCyan':        '#56b6c2',
+      'terminal.ansiBrightWhite':       '#ffffff',
+    };
+    for (const [id, value] of Object.entries(oneDark)) {
+      colors.register({ id, description: id, defaults: { dark: value, light: value, hcDark: value, hcLight: value } });
+    }
+  }
+}
+
 export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   // ModeService — singleton that owns editor mode state
   bind(ModeService).toSelf().inSingletonScope();
+
+  // Register One Dark Pro terminal color palette for xterm.js
+  bind(ColorContribution).to(OneDarkTerminalColors).inSingletonScope();
 
   // Register the Neovim file opener
   bind(OpenHandler).to(NvimOpenHandler).inSingletonScope();
