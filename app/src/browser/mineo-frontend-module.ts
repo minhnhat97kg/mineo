@@ -169,10 +169,13 @@ class TouchScrollContribution implements FrontendApplicationContribution {
  */
 @injectable()
 class MenuBarToggleContribution implements FrontendApplicationContribution {
+  @inject(FrontendApplicationStateService) protected readonly stateService!: FrontendApplicationStateService;
+
   private static readonly STORAGE_KEY = 'mineo.menuBarCollapsed';
+  private _collapsed = false;
 
   onStart(): void {
-    const collapsed = localStorage.getItem(MenuBarToggleContribution.STORAGE_KEY) === '1';
+    this._collapsed = localStorage.getItem(MenuBarToggleContribution.STORAGE_KEY) === '1';
 
     // Create the fixed chevron button
     const btn = document.createElement('button');
@@ -181,6 +184,7 @@ class MenuBarToggleContribution implements FrontendApplicationContribution {
     document.body.appendChild(btn);
 
     const apply = (isCollapsed: boolean): void => {
+      this._collapsed = isCollapsed;
       const panel = document.getElementById('theia-top-panel');
       if (panel) {
         panel.classList.toggle('menu-collapsed', isCollapsed);
@@ -191,15 +195,10 @@ class MenuBarToggleContribution implements FrontendApplicationContribution {
       localStorage.setItem(MenuBarToggleContribution.STORAGE_KEY, isCollapsed ? '1' : '0');
     };
 
-    btn.addEventListener('click', () => {
-      const panel = document.getElementById('theia-top-panel');
-      const isNowCollapsed = panel ? !panel.classList.contains('menu-collapsed') : false;
-      apply(isNowCollapsed);
-    });
+    btn.addEventListener('click', () => apply(!this._collapsed));
 
-    // Restore persisted state after the shell has rendered
-    // (small delay so #theia-top-panel exists in DOM)
-    setTimeout(() => apply(collapsed), 100);
+    // Restore persisted state once the shell has fully rendered
+    this.stateService.reachedState('ready').then(() => apply(this._collapsed));
   }
 }
 
