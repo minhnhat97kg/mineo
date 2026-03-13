@@ -20,7 +20,8 @@
   },
   "devDependencies": {
     "@theia/cli": "1.69.0",
-    "@types/ws": "^8.18.1"
+    "@types/ws": "^8.18.1",
+    "copy-webpack-plugin": "^14.0.0"
   },
   "scripts": {
     "build": "tsc && theia build --mode development && webpack --config gen-webpack.config.js",
