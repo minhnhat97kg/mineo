@@ -1,23 +1,20 @@
 /* Mineo: suppress Theia chrome we don't want */
 
-/* Tab bar (Lumino — Theia 1.27+) */
-.lm-TabBar {
+/* Hide tab bar in main panel — Neovim occupies the whole area, no tabs needed */
+#theia-main-content-panel > .lm-TabBar {
   display: none !important;
   height: 0 !important;
   min-height: 0 !important;
   overflow: hidden !important;
 }
 
-/* Editor container: fill space vacated by tab bar */
-.theia-main-content-panel .lm-Widget.lm-SplitPanel-child:first-child {
-  flex: 1 !important;
-}
-
 /* Menu bar */
+/*
 .theia-menu-bar,
 .p-MenuBar {
   display: none !important;
 }
+*/
 
 /* Status bar area for activity bar toggle button */
 .theia-left-panel-toggle-button {
@@ -27,4 +24,178 @@
 /* Panel borders/handles residual chrome */
 .lm-SplitPanel-handle {
   background: #3e4451;
+}
+
+/* ── Combine Top Menu and Status Bar ─────────────────────────────────────── */
+
+/* ── Unified Top Bar (Lessons from Cursor/JetBrains UI) ───────────────────── */
+
+#theia-top-panel {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  background-color: var(--theia-statusBar-background) !important;
+  border-bottom: 1px solid var(--theia-sideBar-background) !important;
+  height: 44px !important; /* Slightly taller for modern look */
+  padding: 0 10px !important;
+  overflow: visible !important;
+}
+
+/* Hide breadcrumbs inside the panel if they are not needed on top */
+.theia-breadcrumbs-container {
+    display: none !important;
+}
+
+.theia-menu-bar {
+  flex: 0 1 auto !important;
+  background: transparent !important;
+  height: 100% !important;
+  font-size: 13px !important;
+}
+
+#theia-statusbar {
+  position: absolute !important;
+  top: 0 !important;
+  right: 10px !important;
+  width: auto !important;
+  height: 44px !important;
+  z-index: 10000 !important;
+  background: transparent !important;
+  border: none !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  pointer-events: none !important;
+}
+
+#theia-statusbar > * {
+  pointer-events: auto !important;
+  margin-left: 12px !important;
+  font-size: 12px !important;
+}
+
+/* ── Ultra-Slim Sidebar ─────────────────────────────────────────────────── */
+
+.theia-left-panel-toggle-button {
+    display: none !important;
+}
+
+#theia-left-side-panel {
+    border-right: 1px solid var(--theia-sideBar-background) !important;
+}
+
+/* Hide the original bottom status bar location */
+#theia-bottom-panel {
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    border: none !important;
+}
+
+/* Adjust main content to fill space since we moved status bar */
+#theia-main-content-panel {
+  bottom: 0 !important;
+}
+
+/* Fix Tab Bar for modern look */
+.lm-TabBar-tab {
+    background-color: transparent !important;
+    border: none !important;
+    font-size: 12px !important;
+    padding: 0 20px !important;
+}
+
+.lm-TabBar-tab.lm-mod-current {
+    background-color: var(--theia-editor-background) !important;
+    border-bottom: 2px solid var(--theia-accent-color, #3574f0) !important;
+}
+
+/* ── NvimWidget fullscreen layout ─────────────────────────────────────────── */
+/* Make the widget node itself fill its Lumino slot */
+.nvim-widget {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* xterm container and canvas must fill the widget 100% */
+.nvim-widget .xterm {
+  flex: 1;
+  overflow: hidden;
+}
+
+.nvim-widget .xterm-viewport,
+.nvim-widget .xterm-screen {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── Touch Toolbar ─────────────────────────────────────────────────────────── */
+
+/* FAB — floating action button */
+.nvim-touch-fab {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #45475a;         /* catppuccin-mocha surface1 */
+  color: #cdd6f4;               /* catppuccin-mocha text */
+  font-size: 20px;
+  line-height: 44px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;           /* let pointer events through */
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: background 0.15s;
+}
+
+.nvim-touch-fab:active {
+  background: #585b70;          /* catppuccin-mocha surface2 */
+}
+
+/* Panel — expands above the FAB */
+.nvim-touch-panel {
+  position: absolute;
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #313244;          /* catppuccin-mocha surface0 */
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  z-index: 101;
+  touch-action: none;
+}
+
+.nvim-touch-panel--hidden {
+  display: none !important;
+}
+
+/* Individual key buttons */
+.nvim-touch-btn {
+  min-width: 52px;
+  height: 36px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: #45475a;          /* catppuccin-mocha surface1 */
+  color: #cdd6f4;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.nvim-touch-btn:active,
+.nvim-touch-btn--active {
+  background: #89b4fa;          /* catppuccin-mocha blue — active/sticky state */
+  color: #1e1e2f;
 }
