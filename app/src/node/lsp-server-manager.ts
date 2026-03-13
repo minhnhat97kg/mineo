@@ -83,7 +83,7 @@ export class LspServerManager implements BackendApplicationContribution {
     });
 
     proc.on('exit', (code) => {
-      console.log(`[LspServerManager] ${lang} exited with code ${code}`);
+      console.error(`[LspServerManager] ${lang} exited with code ${code}`);
       this.servers.delete(lang);
     });
 
