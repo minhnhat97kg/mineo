@@ -374,8 +374,9 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
 
   async activateNeovimMode(startup: boolean): Promise<void> {
     // Step 0: dirty-check (skipped on startup — no user-created editor state yet)
+    // EditorManager has no getDirtyEditors() method in Theia 1.x — use .all + saveable.dirty
     if (!startup) {
-      const dirty = this.editorManager.getDirtyEditors?.() ?? [];
+      const dirty = this.editorManager.all.filter(w => w.saveable.dirty);
       if (dirty.length > 0) {
         throw new Error('Save or discard Monaco changes before switching to Neovim.');
       }
@@ -793,7 +794,7 @@ git commit -m "fix: editor-toggle build and integration fixes"
 
 ## Notes for Implementors
 
-1. **`EditorManager.getDirtyEditors()`** — This method exists on `EditorManager` in Theia 1.x. If the exact method name differs (e.g., `getEditors()` + filter by `editor.saveable.dirty`), use the available API. The goal is: are there any unsaved Monaco buffers?
+1. **`EditorManager` dirty-check** — `EditorManager` in Theia 1.x has no `getDirtyEditors()` method. Use `this.editorManager.all.filter(w => w.saveable.dirty)` to find editors with unsaved changes. `editorManager.all` returns all open `EditorWidget[]`.
 
 2. **`ApplicationShell.mainPanel`** — In Theia 1.69, `ApplicationShell` has a `mainPanel` property. If iterating its `.widgets` doesn't work as expected (API may vary), an alternative is `this.shell.getWidgets('main')` which returns the widgets in the main area.
 
