@@ -3,16 +3,15 @@ import net from 'net';
 const NVIM_SOCK = '/tmp/nvim.sock';
 
 /**
- * Check whether the nvim RPC socket is accepting connections.
+ * Check whether the nvim RPC socket is accepting connections and responding.
  *
- * Uses socket.setTimeout() + the 'timeout' event for the timeout path
- * because net.createConnection does not accept a timeout option directly;
- * the 'timeout' event fires but does NOT close the socket — we must call
- * socket.destroy() explicitly.
+ * Opens a connection and sets a timeout for socket inactivity. If data is received
+ * (indicating the socket is responsive), returns true. If the connection times out
+ * without any data, returns false.
  *
  * @param sockPath Path to the Unix socket (defaults to /tmp/nvim.sock)
- * @param timeoutMs Connection timeout in milliseconds (defaults to 500)
- * @returns true if connection succeeded, false on any error or timeout
+ * @param timeoutMs Connection/response timeout in milliseconds (defaults to 500)
+ * @returns true if socket connects and responds within timeout, false otherwise
  */
 export function checkNvimReady(
   sockPath: string = NVIM_SOCK,
@@ -20,20 +19,39 @@ export function checkNvimReady(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = net.createConnection(sockPath);
+    let resolved = false;
+
     socket.setTimeout(timeoutMs);
 
     socket.on('connect', () => {
-      socket.destroy();
-      resolve(true);
+      // Connection successful, but keep waiting for data or timeout
+      // (don't resolve yet - let timeout or data event decide)
     });
+
+    socket.on('data', () => {
+      // Received response - socket is responsive
+      if (!resolved) {
+        resolved = true;
+        socket.destroy();
+        resolve(true);
+      }
+    });
+
     socket.on('timeout', () => {
-      // 'timeout' does not close the socket — must destroy manually
-      socket.destroy();
-      resolve(false);
+      // Timeout fired - socket didn't respond within timeoutMs
+      if (!resolved) {
+        resolved = true;
+        socket.destroy();
+        resolve(false);
+      }
     });
+
     socket.on('error', () => {
-      // ENOENT (no such file), ECONNREFUSED, etc. — all map to false
-      resolve(false);
+      // Connection error (ENOENT, ECONNREFUSED, etc.) - socket not available
+      if (!resolved) {
+        resolved = true;
+        resolve(false);
+      }
     });
   });
 }
