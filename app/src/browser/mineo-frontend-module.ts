@@ -194,9 +194,12 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
   }
 
   async activateMonacoMode(): Promise<void> {
-    // Hide the nvim widget if it exists
+    // Close the nvim widget if it exists — hideWidget is not available in Theia 1.69.
+    // The widget is recreated on next switch to neovim mode (activateNeovimMode creates
+    // a new terminal if nvimWidget is disposed).
     if (this.nvimWidget && !this.nvimWidget.isDisposed) {
-      (this.shell as any).hideWidget(this.nvimWidget.id);
+      await this.shell.closeWidget(this.nvimWidget.id);
+      this.nvimWidget = undefined;
     }
     // Monaco area is already empty — NvimOpenHandler returns -1 in monaco mode
   }
