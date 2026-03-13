@@ -168,9 +168,10 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
       this.shell.addWidget(this.nvimWidget!, { area: 'main' });
       this.shell.activateWidget(this.nvimWidget!.id);
     } catch (err) {
-      // Rollback: if we just created the widget, dispose it
+      // Rollback: if we just created the widget, dispose it (it may not be in
+      // the shell yet, so dispose() is safer than closeWidget())
       if (created && this.nvimWidget) {
-        this.shell.closeWidget(this.nvimWidget.id);
+        this.nvimWidget.dispose();
         this.nvimWidget = undefined;
       }
       throw err;
@@ -178,13 +179,12 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
 
     // Step 2: close Monaco editor widgets from the main panel (skipped on startup)
     // We close EditorWidget instances only — not terminal panels, diff viewers, etc.
+    // Snapshot into an array first to avoid iterating a live iterator while closing.
     if (!startup) {
-      const mainWidgets = (this.shell.mainPanel as any).widgets as ReadonlyArray<Widget>;
-      for (const w of mainWidgets) {
-        if (w instanceof EditorWidget) {
-          this.shell.closeWidget(w.id);
-        }
-      }
+      const mainWidgets = Array.from(
+        (this.shell.mainPanel as any).widgets() as IterableIterator<Widget>
+      ).filter(w => w instanceof EditorWidget);
+      await Promise.all(mainWidgets.map(w => this.shell.closeWidget(w.id)));
     }
 
     // Step 3: poll /api/nvim-ready (non-fatal; never throws)
@@ -194,11 +194,7 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
   async activateMonacoMode(): Promise<void> {
     // Hide the nvim widget if it exists
     if (this.nvimWidget && !this.nvimWidget.isDisposed) {
-      try {
-        (this.shell as any).hideWidget(this.nvimWidget.id);
-      } catch (err) {
-        throw err;
-      }
+      (this.shell as any).hideWidget(this.nvimWidget.id);
     }
     // Monaco area is already empty — NvimOpenHandler returns -1 in monaco mode
   }
@@ -207,7 +203,7 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
 
   private async _waitForNvimReady(): Promise<void> {
     const POLL_MS = 200;
-    const MAX_POLLS = 25; // 5 seconds total
+    const MAX_POLLS = 25; // up to ~5 seconds (25 polls × 200ms sleep between attempts)
     for (let i = 0; i < MAX_POLLS; i++) {
       try {
         const res = await fetch('/api/nvim-ready');
@@ -218,7 +214,10 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
       } catch {
         // Network error — treat as "not ready yet"
       }
-      await new Promise(resolve => setTimeout(resolve, POLL_MS));
+      // Sleep between polls (not after the final one)
+      if (i < MAX_POLLS - 1) {
+        await new Promise(resolve => setTimeout(resolve, POLL_MS));
+      }
     }
     // Timeout — non-fatal toast
     this.messageService.warn(
