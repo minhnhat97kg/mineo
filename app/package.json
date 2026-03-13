@@ -3,19 +3,24 @@
   "name": "mineo-app",
   "version": "1.0.0",
   "dependencies": {
-    "mineo-app": "file:.",
     "@theia/core": "1.69.0",
     "@theia/editor": "1.69.0",
-    "@theia/monaco": "1.69.0",
     "@theia/filesystem": "1.69.0",
+    "@theia/messages": "1.69.0",
+    "@theia/monaco": "1.69.0",
     "@theia/navigator": "1.69.0",
-    "@theia/terminal": "1.69.0",
     "@theia/plugin-ext": "1.69.0",
     "@theia/plugin-ext-vscode": "1.69.0",
-    "@theia/messages": "1.69.0"
+    "@theia/terminal": "1.69.0",
+    "mineo-app": "file:.",
+    "monaco-languageclient": "^8.4.0",
+    "vscode-jsonrpc": "^8.2.0",
+    "vscode-languageclient": "^9.0.1",
+    "web-tree-sitter": "^0.22.6"
   },
   "devDependencies": {
-    "@theia/cli": "1.69.0"
+    "@theia/cli": "1.69.0",
+    "@types/ws": "^8.18.1"
   },
   "scripts": {
     "build": "tsc && theia build --mode development && webpack --config gen-webpack.config.js",
