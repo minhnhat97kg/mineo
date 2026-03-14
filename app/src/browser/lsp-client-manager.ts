@@ -284,12 +284,12 @@ export class LspClientManager implements FrontendApplicationContribution {
 
         this._clients.set(endpoint, client);
 
-        try {
-            client.start();
-        } catch {
+        await client.start().catch((err: unknown) => {
+            console.warn(`[LspClientManager] start failed for "${endpoint}":`, err);
             this._clients.delete(endpoint);
             this._sockets.delete(endpoint);
-        }
+            if (ws.readyState === WebSocket.OPEN) ws.close();
+        });
     }
 
     disposeAll(): void {

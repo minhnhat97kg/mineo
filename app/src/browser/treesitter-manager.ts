@@ -150,7 +150,7 @@ export class TreesitterManager implements FrontendApplicationContribution {
                     const seenStarts = new Set<number>();
 
                     function walk(node: Parser.SyntaxNode): void {
-                        if (node.isNamed && tokenMap[node.type] !== undefined) {
+                        if (node.isNamed && node.childCount === 0 && tokenMap[node.type] !== undefined) {
                             const startIndex = node.startIndex;
                             if (!seenStarts.has(startIndex)) {
                                 seenStarts.add(startIndex);
