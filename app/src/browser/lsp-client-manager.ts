@@ -17,6 +17,7 @@ const LANG_ENDPOINT: Record<string, string> = {
     typescript:      'typescript',
     typescriptreact: 'typescript',
     javascript:      'typescript',
+    javascriptreact: 'typescript',
     python:          'python',
     go:              'go',
     rust:            'rust',
@@ -190,11 +191,15 @@ export class LspClientManager implements FrontendApplicationContribution {
     private _stopped = false;
 
     onStart(): void {
-        // When switching to neovim mode dispose all LSP clients
+        // When switching to neovim mode dispose all LSP clients.
+        // When switching to monaco mode, start clients for any already-open editors
+        // (handles the case where the user was in neovim mode on startup).
         this._toDispose.push(
             this.modeService.onModeChange(mode => {
                 if (mode === 'neovim') {
                     this.disposeAll();
+                } else {
+                    this._startClientsForOpenEditors();
                 }
             })
         );
@@ -215,6 +220,12 @@ export class LspClientManager implements FrontendApplicationContribution {
     }
 
     // ── Private helpers ────────────────────────────────────────────────────────
+
+    private _startClientsForOpenEditors(): void {
+        for (const widget of this.editorManager.all) {
+            this._onEditorCreated(widget);
+        }
+    }
 
     private _onEditorCreated(widget: EditorWidget): void {
         const languageId = widget.editor.document.languageId;

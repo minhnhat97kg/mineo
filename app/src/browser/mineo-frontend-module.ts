@@ -29,6 +29,32 @@ import { TreesitterManager } from './treesitter-manager';
 // to prevent "Max disconnected buffer size exceeded" errors when backgrounded
 (SocketWriteBuffer as any).DISCONNECTED_BUFFER_SIZE = 50 * 1024 * 1024;
 
+// ── Language associations ─────────────────────────────────────────────────────
+// @theia/monaco-editor-core is a stripped-down build with no built-in language
+// definitions. The typescript-language-features VSCode plugin also doesn't
+// contribute a "languages" manifest key. Without these registrations, all files
+// open as Plain Text, which breaks both TreeSitter tokenization and LSP dispatch
+// (both key on languageId). Register the mappings here at module-load time so
+// Monaco's ILanguageService.createByFilepathOrFirstLine() resolves them before
+// any editor widget is created.
+import * as monaco from '@theia/monaco-editor-core';
+const LANG_ASSOCIATIONS: Array<{ id: string; extensions: string[]; aliases: string[] }> = [
+  { id: 'typescript',  extensions: ['.ts', '.tsx'],          aliases: ['TypeScript', 'ts']   },
+  { id: 'javascript',  extensions: ['.js', '.jsx', '.mjs'],  aliases: ['JavaScript', 'js']   },
+  { id: 'python',      extensions: ['.py', '.pyw'],          aliases: ['Python', 'py']       },
+  { id: 'go',          extensions: ['.go'],                  aliases: ['Go']                 },
+  { id: 'rust',        extensions: ['.rs'],                  aliases: ['Rust', 'rs']         },
+  { id: 'json',        extensions: ['.json'],                aliases: ['JSON', 'json']       },
+  { id: 'markdown',    extensions: ['.md', '.markdown'],     aliases: ['Markdown', 'md']     },
+  { id: 'html',        extensions: ['.html', '.htm'],        aliases: ['HTML', 'html']       },
+  { id: 'css',         extensions: ['.css'],                 aliases: ['CSS', 'css']         },
+  { id: 'shellscript', extensions: ['.sh', '.bash'],         aliases: ['Shell Script', 'sh'] },
+  { id: 'yaml',        extensions: ['.yml', '.yaml'],        aliases: ['YAML', 'yaml']       },
+];
+for (const lang of LANG_ASSOCIATIONS) {
+  monaco.languages.register(lang);
+}
+
 // ─── Prevent stale layout restoration ────────────────────────────────────────
 // Theia persists the shell layout (including terminal widgets) to localStorage
 // on window close, then restores it on reload. This causes stale terminal

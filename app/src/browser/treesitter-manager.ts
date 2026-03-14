@@ -1,7 +1,8 @@
 import { injectable, inject, LazyServiceIdentifier } from '@theia/core/shared/inversify';
 import { FrontendApplicationContribution } from '@theia/core/lib/browser';
 import * as monaco from '@theia/monaco-editor-core';
-import { Parser, Language, Node } from 'web-tree-sitter';
+import { Parser, Language } from 'web-tree-sitter';
+import type { Node as TsNode } from 'web-tree-sitter';
 import { Disposable } from '@theia/core/lib/common/disposable';
 import { ModeService } from './mode-service';
 
@@ -32,7 +33,31 @@ const LANGUAGES: Record<string, LangConfig> = {
             property_identifier: 'variable',
         },
     },
+    typescriptreact: {
+        wasmPath: '/grammars/tree-sitter-typescript.wasm',
+        tokenMap: {
+            comment: 'comment',
+            string: 'string',
+            number: 'number',
+            keyword: 'keyword',
+            identifier: 'identifier',
+            type_identifier: 'type',
+            property_identifier: 'variable',
+        },
+    },
     javascript: {
+        wasmPath: '/grammars/tree-sitter-typescript.wasm',
+        tokenMap: {
+            comment: 'comment',
+            string: 'string',
+            number: 'number',
+            keyword: 'keyword',
+            identifier: 'identifier',
+            type_identifier: 'type',
+            property_identifier: 'variable',
+        },
+    },
+    javascriptreact: {
         wasmPath: '/grammars/tree-sitter-typescript.wasm',
         tokenMap: {
             comment: 'comment',
@@ -152,7 +177,7 @@ export class TreesitterManager implements FrontendApplicationContribution {
                     const tokens: monaco.languages.IToken[] = [];
                     const seenStarts = new Set<number>();
 
-                    function walk(node: Node): void {
+                    function walk(node: TsNode): void {
                         if (node.isNamed && node.childCount === 0 && tokenMap[node.type] !== undefined) {
                             const startIndex = node.startIndex;
                             if (!seenStarts.has(startIndex)) {
