@@ -1,4 +1,4 @@
-import { injectable, inject } from '@theia/core/shared/inversify';
+import { injectable, inject, LazyServiceIdentifier } from '@theia/core/shared/inversify';
 import { FrontendApplicationContribution } from '@theia/core/lib/browser';
 import * as monaco from '@theia/monaco-editor-core';
 import Parser from 'web-tree-sitter';
@@ -88,7 +88,7 @@ const LANGUAGES: Record<string, LangConfig> = {
 @injectable()
 export class TreesitterManager implements FrontendApplicationContribution {
 
-    @inject(ModeService) protected readonly modeService!: ModeService;
+    @inject(new LazyServiceIdentifier(() => ModeService)) protected readonly modeService!: ModeService;
 
     private _initialized = false;
     private readonly _parsers = new Map<string, Parser>();

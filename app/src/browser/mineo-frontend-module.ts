@@ -22,7 +22,6 @@ import { ServiceConnectionProvider, RemoteConnectionProvider } from '@theia/core
 import { FileNavigatorContribution } from '@theia/navigator/lib/browser/navigator-contribution';
 import { NvimWidget } from './neovim-widget';
 import { ModeService, ModeActivator, EditorMode } from './mode-service';
-export { ModeService } from './mode-service';
 import { LspClientManager } from './lsp-client-manager';
 import { TreesitterManager } from './treesitter-manager';
 

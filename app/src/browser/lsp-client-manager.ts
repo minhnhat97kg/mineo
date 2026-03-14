@@ -1,4 +1,4 @@
-import { injectable, inject } from '@theia/core/shared/inversify';
+import { injectable, inject, LazyServiceIdentifier } from '@theia/core/shared/inversify';
 import { FrontendApplicationContribution } from '@theia/core/lib/browser';
 import { EditorManager } from '@theia/editor/lib/browser';
 import { EditorWidget } from '@theia/editor/lib/browser/editor-widget';
@@ -170,7 +170,7 @@ function createWebSocketTransports(ws: WebSocket): MessageTransports {
 @injectable()
 export class LspClientManager implements FrontendApplicationContribution {
 
-    @inject(ModeService)
+    @inject(new LazyServiceIdentifier(() => ModeService))
     protected readonly modeService!: ModeService;
 
     @inject(EditorManager)
