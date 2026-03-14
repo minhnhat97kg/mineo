@@ -187,6 +187,10 @@ class PaneWrapper extends BaseWidget {
         return this.innerWidget;
     }
 
+    get leafData(): { id: string; instanceId: string; role: string } {
+        return { id: this.leaf.id, instanceId: this.leaf.instanceId, role: this.leaf.role };
+    }
+
     protected override onResize(msg: Widget.ResizeMessage): void {
         super.onResize(msg);
         if (this.innerWidget instanceof NvimWidget) {
@@ -629,20 +633,19 @@ export class TilingContainer extends BaseWidget {
     }
 
     override dispose(): void {
-        for (const [leafId, wrapper] of this.wrapperMap) {
-            if (!this.layoutTreeManager.findLeaf(leafId)) {
-                const inner = wrapper.getInnerWidget();
-                const found = this.layoutTreeManager.findLeaf(leafId);
-                if (inner && found) {
-                    TilingContainer.widgetPool.delete(found.leaf.instanceId);
-                    const descriptor = this.paneRegistry.get(found.leaf.role);
-                    descriptor?.destroy?.(inner, found.leaf.instanceId);
-                    if (found.leaf.role === 'neovim' || found.leaf.role === 'terminal') {
-                        this.ptyControlService.kill(found.leaf.instanceId).catch(() => {});
-                    }
-                }
-                wrapper.dispose();
+        for (const [, wrapper] of this.wrapperMap) {
+            const inner = wrapper.getInnerWidget();
+            const { instanceId, role } = wrapper.leafData;
+
+            if (inner) {
+                TilingContainer.widgetPool.delete(instanceId);
+                const descriptor = this.paneRegistry.get(role);
+                descriptor?.destroy?.(inner, instanceId);
             }
+            if (role === 'neovim' || role === 'terminal') {
+                this.ptyControlService.kill(instanceId).catch(() => {});
+            }
+            wrapper.dispose();
         }
         this.wrapperMap.clear();
         this.splitMap.clear();
