@@ -1,0 +1,182 @@
+/* ── Pane Header Bar ──────────────────────────────────────────────────────── */
+
+.mineo-pane-header {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    min-height: 24px;
+    padding: 0 4px;
+    background: rgba(17, 17, 27, 0.6);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 4px;
+    z-index: 10;
+    flex-shrink: 0;
+    user-select: none;
+    cursor: default;
+}
+
+/* Drag grip — leftmost element */
+.mineo-pane-header-drag {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 100%;
+    cursor: grab;
+    color: rgba(205, 214, 244, 0.2);
+    font-size: 12px;
+    flex-shrink: 0;
+    transition: color 0.15s;
+}
+
+.mineo-pane-header-drag:hover {
+    color: rgba(205, 214, 244, 0.55);
+}
+
+.mineo-pane-header-drag:active {
+    cursor: grabbing;
+}
+
+/* Icon + label */
+.mineo-pane-header-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    font-size: 12px;
+    color: rgba(205, 214, 244, 0.4);
+    flex-shrink: 0;
+}
+
+.mineo-pane-header-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: rgba(205, 214, 244, 0.4);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Right-side action buttons */
+.mineo-pane-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+}
+
+.mineo-pane-header-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: rgba(205, 214, 244, 0.3);
+    font-size: 11px;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+    padding: 0;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.mineo-pane-header-btn:hover {
+    color: rgba(205, 214, 244, 0.85);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.mineo-pane-header-btn--close:hover {
+    color: rgba(243, 139, 168, 0.9);
+    background: rgba(243, 139, 168, 0.1);
+}
+
+/* Pane content area — fills remaining space below header */
+.mineo-pane-content {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Wrapper that holds header + content together */
+.mineo-pane-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Active pane outline on the wrapper */
+.mineo-pane-wrapper.mineo-pane-active {
+    box-shadow: inset 0 0 0 1px rgba(53, 116, 240, 0.3);
+}
+
+.mineo-pane-wrapper.mineo-pane-close-preview {
+    box-shadow: inset 0 0 0 1px rgba(243, 139, 168, 0.5) !important;
+}
+
+/* Active pane — brighten header label and icon */
+.mineo-pane-wrapper.mineo-pane-active .mineo-pane-header-label,
+.mineo-pane-wrapper.mineo-pane-active .mineo-pane-header-icon {
+    color: rgba(205, 214, 244, 0.65);
+}
+
+/* ── Pane Type Picker Menu ────────────────────────────────────────────────── */
+
+.mineo-pane-picker {
+    position: fixed;
+    z-index: 9999;
+    min-width: 180px;
+    padding: 4px 0;
+    background: rgba(24, 24, 37, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    font-size: 12px;
+    user-select: none;
+}
+
+.mineo-pane-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    color: rgba(205, 214, 244, 0.75);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+}
+
+.mineo-pane-picker-item:hover:not(.mineo-pane-picker-item--disabled) {
+    background: rgba(255, 255, 255, 0.07);
+    color: rgba(205, 214, 244, 0.95);
+}
+
+.mineo-pane-picker-item--disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.mineo-pane-picker-item-icon {
+    width: 14px;
+    height: 14px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(205, 214, 244, 0.5);
+    flex-shrink: 0;
+}
