@@ -3,7 +3,7 @@ import { FrontendApplicationContribution } from '@theia/core/lib/browser';
 import * as monaco from '@theia/monaco-editor-core';
 import Parser from 'web-tree-sitter';
 import { Disposable } from '@theia/core/lib/common/disposable';
-import { ModeService } from './mineo-frontend-module';
+import { ModeService } from './mode-service';
 
 // ── Minimal Monaco IState implementation ─────────────────────────────────────
 

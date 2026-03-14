@@ -9,7 +9,7 @@ import {
     ReadableStreamMessageReader,
     WriteableStreamMessageWriter,
 } from 'vscode-jsonrpc/lib/common/api';
-import { ModeService } from './mineo-frontend-module';
+import { ModeService } from './mode-service';
 
 // ── Language → LSP endpoint mapping ──────────────────────────────────────────
 
