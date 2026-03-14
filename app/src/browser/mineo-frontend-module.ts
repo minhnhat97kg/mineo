@@ -225,7 +225,7 @@ class NvimOpenHandler implements OpenHandler {
       const focusedLeafId = this.layoutTreeManager.focusedLeafId;
       if (focusedLeafId) {
         const found = this.layoutTreeManager.findLeaf(focusedLeafId);
-        if (found && found.leaf.role === 'editor') {
+        if (found && found.leaf.role === 'neovim') {
           url += '&instanceId=' + encodeURIComponent(found.leaf.instanceId);
         }
       }

@@ -1,119 +1,190 @@
-import { injectable } from '@theia/core/shared/inversify';
+import { injectable, inject } from '@theia/core/shared/inversify';
 import { MessagingService } from '@theia/core/lib/node/messaging/messaging-service';
-import { spawn, IPty } from 'node-pty';
-import { loadConfig } from './config';
-import * as path from 'path';
-import * as fs from 'fs';
+import { Channel } from '@theia/core';
 import { execFile } from 'child_process';
-
-const CONFIG_PATH = process.env.MINEO_CONFIG || path.resolve(__dirname, '../../../config.json');
-const cfg = loadConfig(CONFIG_PATH);
-const NVIM_SOCK = '/tmp/mineo-nvim.sock';
+import { PtyManager } from './pty-manager';
+import {
+    PTY_CONTROL_PATH,
+    ptyDataPath,
+    ptyResizePath,
+    ptyBufferWatchPath,
+} from '../common/pty-protocol';
+import type {
+    PtyControlRequest,
+    PtyControlResponse,
+} from '../common/pty-protocol';
+import type { PtyInstanceId } from '../common/layout-types';
 
 @injectable()
 export class NeovimPtyContribution implements MessagingService.Contribution {
-    private pty: IPty | undefined;
+    @inject(PtyManager) private readonly ptyManager!: PtyManager;
+
+    /** MessagingService reference — needed to register channels dynamically after spawn. */
+    private messagingService: MessagingService | undefined;
+
+    /** Track registered channel paths to avoid double-registration. */
+    private registeredPaths = new Set<string>();
 
     configure(service: MessagingService): void {
-        service.registerChannelHandler('/services/neovim-pty', (_params, channel) => {
-            // Spawn nvim only if not already running — reconnect on page refresh
-            if (!this.pty) {
-                // Remove stale socket file before spawning nvim.
-                try { fs.unlinkSync(NVIM_SOCK); } catch { /* doesn't exist — fine */ }
+        this.messagingService = service;
 
-                this.pty = spawn(cfg.nvim.bin, ['--listen', NVIM_SOCK, '-c', 'set mouse=a'], {
-                    name: 'xterm-256color',
-                    cols: 120,
-                    rows: 30,
-                    cwd: cfg.workspace,
-                    env: {
-                        ...process.env,
-                        TERM: 'xterm-256color',
-                        COLORTERM: 'truecolor',
-                    } as Record<string, string>,
-                });
-
-                // Handle PTY exit — nvim quit intentionally (e.g. :q)
-                this.pty.onExit(() => {
-                    this.pty = undefined;
-                    channel.close();
-                });
-            } else {
-                // Reconnecting — redraw so the terminal is up to date
-                this.pty.write('\x0c'); // Ctrl-L to force redraw
-            }
-
-            // PTY stdout → channel (frontend) as raw bytes.
-            // Translate ISO 8613-6 colon-separated RGB params to semicolon-separated,
-            // because xterm.js only understands the legacy semicolon form.
-            // e.g. ESC[38:2:R:G:Bm  →  ESC[38;2;R;G;Bm
-            //      ESC[48:2:R:G:Bm  →  ESC[48;2;R;G;Bm
-            const colonRgbRe = /\x1b\[(\d+):2:(\d+):(\d+):(\d+)m/g;
-            const onData = this.pty.onData((data: any) => {
-                const str: string = typeof data === 'string' ? data : (data as Buffer).toString('utf8');
-                const translated = str.replace(colonRgbRe, '\x1b[$1;2;$2;$3;$4m');
-                const bytes = Buffer.from(translated, 'utf8');
-                channel.getWriteBuffer().writeBytes(bytes).commit();
-            });
-
-            // Channel (frontend) → PTY stdin
+        // ── Control channel — handles spawn/kill requests ──────────────────
+        service.registerChannelHandler(PTY_CONTROL_PATH, (_params, channel) => {
             channel.onMessage(e => {
-                const bytes = e().readBytes();
-                this.pty?.write(Buffer.from(bytes) as any);
-            });
+                const msg = e().readString();
+                let req: PtyControlRequest;
+                try {
+                    req = JSON.parse(msg);
+                } catch {
+                    this.sendControlResponse(channel, { instanceId: '', status: 'error', error: 'Invalid JSON' });
+                    return;
+                }
 
-            // Channel close = browser disconnected, NOT nvim quit — keep nvim alive
-            channel.onClose(() => {
-                onData.dispose();
+                if (req.action === 'spawn') {
+                    try {
+                        this.ptyManager.spawn(req.instanceId, req.role, req.cols, req.rows, req.cwd);
+                        this.registerInstanceChannels(req.instanceId);
+                        this.sendControlResponse(channel, { instanceId: req.instanceId, status: 'ok' });
+                    } catch (err: any) {
+                        this.sendControlResponse(channel, {
+                            instanceId: req.instanceId,
+                            status: 'error',
+                            error: err?.message ?? 'spawn failed',
+                        });
+                    }
+                } else if (req.action === 'kill') {
+                    this.ptyManager.kill(req.instanceId);
+                    this.sendControlResponse(channel, { instanceId: req.instanceId, status: 'ok' });
+                }
             });
         });
 
-        // Resize endpoint — frontend sends resize requests via a separate channel
+        // ── Legacy backward-compat aliases ─────────────────────────────────
+        // Route old paths to the primary PTY so existing code works during migration.
+        service.registerChannelHandler('/services/neovim-pty', (_params, channel) => {
+            // Wait for a primary PTY to exist, then bridge
+            const tryBridge = (): void => {
+                const primaryId = this.ptyManager.getPrimaryId();
+                if (!primaryId) {
+                    // No primary yet — wait and retry
+                    setTimeout(tryBridge, 100);
+                    return;
+                }
+                this.bridgeDataChannel(primaryId, channel);
+            };
+            tryBridge();
+        });
+
         service.registerChannelHandler('/services/neovim-pty-resize', (_params, channel) => {
             channel.onMessage(e => {
                 const msg = e().readString();
-                // Format: "cols,rows"
                 const [cols, rows] = msg.split(',').map(Number);
-                if (this.pty && cols > 0 && rows > 0) {
-                    this.pty.resize(cols, rows);
+                const primaryId = this.ptyManager.getPrimaryId();
+                if (primaryId && cols > 0 && rows > 0) {
+                    this.ptyManager.resize(primaryId, cols, rows);
                 }
             });
         });
 
-        // Buffer-watch endpoint — polls nvim for the current buffer path every 500ms
-        // and pushes it to the frontend whenever it changes, so the file explorer
-        // can reveal and select the active file.
-        //
-        // Uses execFile (async) instead of execSync to avoid blocking the event loop.
-        // An in-flight guard prevents overlapping calls if nvim responds slowly.
         service.registerChannelHandler('/services/nvim-buffer-watch', (_params, channel) => {
-            let lastPath = '';
-            let inFlight = false;
-            let timer: ReturnType<typeof setInterval> | undefined;
-
-            timer = setInterval(() => {
-                if (inFlight) return; // skip tick if previous call hasn't returned yet
-                inFlight = true;
-                execFile(cfg.nvim.bin, ['--server', NVIM_SOCK, '--remote-expr', 'expand("%:p")'], {
-                    timeout: 300,
-                }, (err, stdout) => {
-                    inFlight = false;
-                    if (err || !stdout) return; // nvim not ready yet or no file open
-                    const result = stdout.trim();
-                    if (result && result !== lastPath) {
-                        lastPath = result;
-                        channel.getWriteBuffer().writeString(result).commit();
-                    }
-                });
-            }, 500);
-
-            channel.onClose(() => {
-                if (timer !== undefined) {
-                    clearInterval(timer);
-                    timer = undefined;
-                }
-            });
+            const primaryId = this.ptyManager.getPrimaryId();
+            if (primaryId) {
+                this.bridgeBufferWatch(primaryId, channel);
+            }
         });
     }
-}
 
+    /**
+     * Register data, resize, and buffer-watch channels for a PTY instance.
+     * Called after a successful spawn.
+     */
+    private registerInstanceChannels(id: PtyInstanceId): void {
+        if (!this.messagingService) return;
+
+        const dataPath = ptyDataPath(id);
+        const resizePath = ptyResizePath(id);
+
+        // Only register if not already registered (channels persist across reconnects)
+        if (!this.registeredPaths.has(dataPath)) {
+            this.registeredPaths.add(dataPath);
+            this.messagingService.registerChannelHandler(dataPath, (_params, channel) => {
+                this.bridgeDataChannel(id, channel);
+            });
+        }
+
+        if (!this.registeredPaths.has(resizePath)) {
+            this.registeredPaths.add(resizePath);
+            this.messagingService.registerChannelHandler(resizePath, (_params, channel) => {
+                channel.onMessage(e => {
+                    const msg = e().readString();
+                    const [cols, rows] = msg.split(',').map(Number);
+                    this.ptyManager.resize(id, cols, rows);
+                });
+            });
+        }
+
+        // Buffer-watch only for editor PTYs
+        if (this.ptyManager.getRole(id) === 'neovim') {
+            const bwPath = ptyBufferWatchPath(id);
+            if (!this.registeredPaths.has(bwPath)) {
+                this.registeredPaths.add(bwPath);
+                this.messagingService.registerChannelHandler(bwPath, (_params, channel) => {
+                    this.bridgeBufferWatch(id, channel);
+                });
+            }
+        }
+    }
+
+    /** Bridge PTY data to/from a channel. */
+    private bridgeDataChannel(id: PtyInstanceId, channel: Channel): void {
+        // PTY → channel
+        const sub = this.ptyManager.onData(id, (data: string) => {
+            const bytes = Buffer.from(data, 'utf8');
+            channel.getWriteBuffer().writeBytes(bytes).commit();
+        });
+
+        // channel → PTY
+        channel.onMessage(e => {
+            const bytes = e().readBytes();
+            this.ptyManager.write(id, Buffer.from(bytes) as any);
+        });
+
+        channel.onClose(() => {
+            sub?.dispose();
+        });
+    }
+
+    /** Bridge buffer-watch polling to a channel. */
+    private bridgeBufferWatch(id: PtyInstanceId, channel: Channel): void {
+        const socketPath = this.ptyManager.getSocketPath(id);
+        if (!socketPath) return;
+
+        let lastPath = '';
+        let inFlight = false;
+        const nvimBin = this.ptyManager.getNvimBin();
+
+        const timer = setInterval(() => {
+            if (inFlight) return;
+            inFlight = true;
+            execFile(nvimBin, ['--server', socketPath, '--remote-expr', 'expand("%:p")'], {
+                timeout: 300,
+            }, (err, stdout) => {
+                inFlight = false;
+                if (err || !stdout) return;
+                const result = stdout.trim();
+                if (result && result !== lastPath) {
+                    lastPath = result;
+                    channel.getWriteBuffer().writeString(result).commit();
+                }
+            });
+        }, 500);
+
+        channel.onClose(() => {
+            clearInterval(timer);
+        });
+    }
+
+    private sendControlResponse(channel: Channel, response: PtyControlResponse): void {
+        channel.getWriteBuffer().writeString(JSON.stringify(response)).commit();
+    }
+}

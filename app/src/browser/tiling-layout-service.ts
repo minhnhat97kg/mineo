@@ -10,7 +10,7 @@ import { BaseWidget, Widget, Message } from '@theia/core/lib/browser/widgets/wid
 import { TilingContainer } from './tiling-container';
 import { PtyControlService } from './pty-control-service';
 import { LayoutTreeManager } from './layout-tree-manager';
-import type { TabLayout } from '../common/layout-types';
+import type { TabLayout, PaneRole } from '../common/layout-types';
 import { CommandRegistry } from '@theia/core/lib/common/command';
 import { SettingsCommands } from './settings-widget';
 import { PaneRegistry } from './panes/index';
@@ -129,7 +129,7 @@ export class TilingLayoutService {
     }
 
     /** Add a new tab with a default editor pane. */
-    async addNewTab(role: string = 'neovim'): Promise<void> {
+    async addNewTab(role: PaneRole = 'neovim'): Promise<void> {
         const tabLayout = this.layoutTreeManager.addTab(role);
         const container = this.createTab(tabLayout);
         this.shell.activateWidget(container.id);
@@ -205,7 +205,7 @@ export class TilingLayoutService {
     }
 
     /** Split the focused pane. */
-    async splitFocusedPane(direction: 'horizontal' | 'vertical', role: string = 'neovim'): Promise<void> {
+    async splitFocusedPane(direction: 'horizontal' | 'vertical', role: PaneRole = 'neovim'): Promise<void> {
         const tabId = this.getActiveTabId();
         let leafId = this.layoutTreeManager.focusedLeafId;
         if (!tabId) return;
@@ -490,7 +490,7 @@ export class TilingLayoutService {
         addItem('Split Horizontal', '⌘⇧\\', () => this.splitFocusedPane('horizontal'));
         addItem('Split Vertical', '⌘⇧-', () => this.splitFocusedPane('vertical'));
         for (const desc of this.paneRegistry.getAll()) {
-            addItem(`Add ${desc.label}`, '', () => this.splitFocusedPane('vertical', desc.role));
+            addItem(`Add ${desc.label}`, '', () => this.splitFocusedPane('vertical', desc.role as PaneRole));
         }
 
         addSeparator();
