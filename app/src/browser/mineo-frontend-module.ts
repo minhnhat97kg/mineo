@@ -22,7 +22,6 @@ import { ServiceConnectionProvider, RemoteConnectionProvider } from '@theia/core
 import { FileNavigatorContribution } from '@theia/navigator/lib/browser/navigator-contribution';
 import { NvimWidget } from './neovim-widget';
 import { ModeService, ModeActivator, EditorMode } from './mode-service';
-import { LspClientManager } from './lsp-client-manager';
 import { TreesitterManager } from './treesitter-manager';
 
 // Increase disconnected buffer size to 50MB (default is 100KB)
@@ -397,10 +396,6 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
 
   // Menu bar collapse/expand toggle
   bind(FrontendApplicationContribution).to(MenuBarToggleContribution).inSingletonScope();
-
-  // LSP client manager — starts Monaco language clients for supported files
-  bind(LspClientManager).toSelf().inSingletonScope();
-  bind(FrontendApplicationContribution).to(LspClientManager).inSingletonScope();
 
   // Treesitter syntax highlighting — WASM-backed tokenizer for Monaco mode
   bind(TreesitterManager).toSelf().inSingletonScope();

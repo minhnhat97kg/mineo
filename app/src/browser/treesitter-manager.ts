@@ -20,90 +20,75 @@ interface LangConfig {
     tokenMap: Record<string, string>;
 }
 
+// Token scope names must match what Monaco's theme trie actually has.
+// dark_vs/dark_plus define direct rules for: comment, string, keyword,
+// constant.numeric, entity.name.type, entity.name.function, variable.
+// Scopes that have no theme rule (e.g. plain 'identifier') render as the
+// default foreground colour — still readable but not distinctly coloured.
+const JS_TS_TOKEN_MAP: Record<string, string> = {
+    comment:             'comment',
+    string:              'string',
+    template_string:     'string',
+    number:              'constant.numeric',
+    keyword:             'keyword',
+    type_identifier:     'entity.name.type',
+    property_identifier: 'variable',
+    function_identifier: 'entity.name.function',
+};
+
 const LANGUAGES: Record<string, LangConfig> = {
     typescript: {
         wasmPath: '/grammars/tree-sitter-typescript.wasm',
-        tokenMap: {
-            comment: 'comment',
-            string: 'string',
-            number: 'number',
-            keyword: 'keyword',
-            identifier: 'identifier',
-            type_identifier: 'type',
-            property_identifier: 'variable',
-        },
+        tokenMap: JS_TS_TOKEN_MAP,
     },
     typescriptreact: {
         wasmPath: '/grammars/tree-sitter-typescript.wasm',
-        tokenMap: {
-            comment: 'comment',
-            string: 'string',
-            number: 'number',
-            keyword: 'keyword',
-            identifier: 'identifier',
-            type_identifier: 'type',
-            property_identifier: 'variable',
-        },
+        tokenMap: JS_TS_TOKEN_MAP,
     },
     javascript: {
         wasmPath: '/grammars/tree-sitter-typescript.wasm',
-        tokenMap: {
-            comment: 'comment',
-            string: 'string',
-            number: 'number',
-            keyword: 'keyword',
-            identifier: 'identifier',
-            type_identifier: 'type',
-            property_identifier: 'variable',
-        },
+        tokenMap: JS_TS_TOKEN_MAP,
     },
     javascriptreact: {
         wasmPath: '/grammars/tree-sitter-typescript.wasm',
-        tokenMap: {
-            comment: 'comment',
-            string: 'string',
-            number: 'number',
-            keyword: 'keyword',
-            identifier: 'identifier',
-            type_identifier: 'type',
-            property_identifier: 'variable',
-        },
+        tokenMap: JS_TS_TOKEN_MAP,
     },
     python: {
         wasmPath: '/grammars/tree-sitter-python.wasm',
         tokenMap: {
-            comment: 'comment',
-            string: 'string',
-            integer: 'number',
-            float: 'number',
-            keyword: 'keyword',
-            identifier: 'identifier',
+            comment:    'comment',
+            string:     'string',
+            integer:    'constant.numeric',
+            float:      'constant.numeric',
+            keyword:    'keyword',
+            type:       'entity.name.type',
+            identifier: 'variable',
         },
     },
     go: {
         wasmPath: '/grammars/tree-sitter-go.wasm',
         tokenMap: {
-            comment: 'comment',
+            comment:                    'comment',
             interpreted_string_literal: 'string',
-            raw_string_literal: 'string',
-            int_literal: 'number',
-            float_literal: 'number',
-            keyword: 'keyword',
-            identifier: 'identifier',
-            type_identifier: 'type',
+            raw_string_literal:         'string',
+            int_literal:                'constant.numeric',
+            float_literal:              'constant.numeric',
+            keyword:                    'keyword',
+            type_identifier:            'entity.name.type',
+            field_identifier:           'variable',
         },
     },
     rust: {
         wasmPath: '/grammars/tree-sitter-rust.wasm',
         tokenMap: {
-            line_comment: 'comment',
-            block_comment: 'comment',
-            string_literal: 'string',
-            integer_literal: 'number',
-            float_literal: 'number',
-            keyword: 'keyword',
-            identifier: 'identifier',
-            type_identifier: 'type',
+            line_comment:    'comment',
+            block_comment:   'comment',
+            string_literal:  'string',
+            integer_literal: 'constant.numeric',
+            float_literal:   'constant.numeric',
+            keyword:         'keyword',
+            type_identifier: 'entity.name.type',
+            field_identifier:'variable',
         },
     },
 };
