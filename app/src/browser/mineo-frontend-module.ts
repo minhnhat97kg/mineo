@@ -1,29 +1,41 @@
 import '../../src/browser/style/suppress.css';
 import '../../src/browser/style/theme.css';
+import '../../src/browser/style/tiling.css';
+import '../../src/browser/style/settings.css';
+import '../../src/browser/style/panes.css';
 
 import { ContainerModule, injectable, inject } from '@theia/core/shared/inversify';
 import { BreadcrumbsContribution, Breadcrumb } from '@theia/core/lib/browser/breadcrumbs/breadcrumbs-constants';
 import { MenuContribution, MenuModelRegistry } from '@theia/core/lib/common/menu';
-import { ApplicationShellOptions, ApplicationShell } from '@theia/core/lib/browser/shell/application-shell';
+import { ApplicationShellOptions } from '@theia/core/lib/browser/shell/application-shell';
 import { FrontendApplicationContribution } from '@theia/core/lib/browser';
 import { FrontendApplicationStateService } from '@theia/core/lib/browser/frontend-application-state';
 import { OpenHandler } from '@theia/core/lib/browser/opener-service';
 import { MessageService } from '@theia/core/lib/common/message-service';
 import URI from '@theia/core/lib/common/uri';
 import { Emitter, Event } from '@theia/core/lib/common/event';
-import { Disposable, DisposableCollection } from '@theia/core/lib/common/disposable';
-import { StatusBar, StatusBarAlignment } from '@theia/core/lib/browser/status-bar/status-bar';
-import { CommandRegistry } from '@theia/core/lib/common/command';
-import { EditorWidget } from '@theia/editor/lib/browser/editor-widget';
-import { EditorManager } from '@theia/editor/lib/browser';
-import { Widget } from '@theia/core/lib/browser/widgets/widget';
+import { Disposable } from '@theia/core/lib/common/disposable';
+import { CommandContribution, CommandRegistry } from '@theia/core/lib/common/command';
+import { KeybindingContribution } from '@theia/core/lib/browser/keybinding';
 import { SocketWriteBuffer } from '@theia/core/lib/common/messaging/socket-write-buffer';
 import { ServiceConnectionProvider, RemoteConnectionProvider } from '@theia/core/lib/browser/messaging/service-connection-provider';
-import { FileNavigatorContribution } from '@theia/navigator/lib/browser/navigator-contribution';
-import { NvimWidget } from './neovim-widget';
-import { ModeService, ModeActivator, EditorMode } from './mode-service';
+import { SelectionService } from '@theia/core/lib/common/selection-service';
+import { UriSelection } from '@theia/core/lib/common/selection';
+import { FileNavigatorContribution, NavigatorContextMenu } from '@theia/navigator/lib/browser/navigator-contribution';
 import { MonarchTokenizer } from './monarch-tokenizer';
+import { PaneRegistry } from './panes/index';
+import { neovimPaneDescriptor } from './panes/neovim-pane';
+import { terminalPaneDescriptor } from './panes/terminal-pane';
+import { monacoPaneDescriptor } from './panes/monaco-pane';
 import { LspClientManager } from './lsp-client-manager';
+import { TilingLayoutService } from './tiling-layout-service';
+import { LayoutTreeManager } from './layout-tree-manager';
+import { PtyControlService } from './pty-control-service';
+import { bindNvimWidgetFactory } from './nvim-widget-factory';
+import { TilingCommandContribution } from './tiling-commands';
+import { SettingsContribution } from './settings-widget';
+import { NvimPreferenceContribution, NvimPreferenceSyncContribution } from './nvim-preferences';
+import { PreferenceContribution } from '@theia/core/lib/common/preferences/preference-schema';
 
 // Increase disconnected buffer size to 50MB (default is 100KB)
 // to prevent "Max disconnected buffer size exceeded" errors when backgrounded
@@ -118,45 +130,6 @@ class TouchScrollContribution implements FrontendApplicationContribution {
     }
 }
 
-/**
- * MenuBarToggleContribution — adds a chevron button that collapses/expands
- * the top menu bar. State is persisted in localStorage.
- */
-@injectable()
-class MenuBarToggleContribution implements FrontendApplicationContribution {
-  @inject(FrontendApplicationStateService) protected readonly stateService!: FrontendApplicationStateService;
-
-  private static readonly STORAGE_KEY = 'mineo.menuBarCollapsed';
-  private _collapsed = false;
-
-  onStart(): void {
-    this._collapsed = localStorage.getItem(MenuBarToggleContribution.STORAGE_KEY) === '1';
-
-    // Create the fixed chevron button
-    const btn = document.createElement('button');
-    btn.className = 'nvim-menu-toggle';
-    btn.title = 'Toggle menu bar';
-    document.body.appendChild(btn);
-
-    const apply = (isCollapsed: boolean): void => {
-      this._collapsed = isCollapsed;
-      const panel = document.getElementById('theia-top-panel');
-      if (panel) {
-        panel.classList.toggle('menu-collapsed', isCollapsed);
-      }
-      document.body.classList.toggle('nvim-menu-collapsed', isCollapsed);
-      btn.textContent = isCollapsed ? '›' : '‹';
-      btn.style.display = isCollapsed ? 'block' : '';
-      localStorage.setItem(MenuBarToggleContribution.STORAGE_KEY, isCollapsed ? '1' : '0');
-    };
-
-    btn.addEventListener('click', () => apply(!this._collapsed));
-
-    // Restore persisted state once the shell has fully rendered
-    this.stateService.reachedState('ready').then(() => apply(this._collapsed));
-  }
-}
-
 // No-op MenuContribution
 @injectable()
 class NoOpMenuContribution implements MenuContribution {
@@ -177,87 +150,42 @@ class NoOpBreadcrumbsContribution implements BreadcrumbsContribution {
 }
 
 /**
- * NvimTerminalContribution manages the Neovim widget lifecycle.
- * It implements ModeActivator so ModeService can trigger widget operations.
- * Uses a dedicated NvimWidget (BaseWidget + xterm.js) instead of Theia's
- * TerminalWidget, completely bypassing TerminalService.
+ * NvimTerminalContribution manages the tiling layout lifecycle.
+ * Uses TilingLayoutService to manage NvimWidgets (via factory) as
+ * standalone Theia tabs.
  */
 @injectable()
-class NvimTerminalContribution implements FrontendApplicationContribution, ModeActivator {
-  @inject(ApplicationShell) protected readonly shell!: ApplicationShell;
-  @inject(ModeService) protected readonly modeService!: ModeService;
-  @inject(EditorManager) protected readonly editorManager!: EditorManager;
+class NvimTerminalContribution implements FrontendApplicationContribution {
   @inject(MessageService) protected readonly messageService!: MessageService;
   @inject(FrontendApplicationStateService) protected readonly stateService!: FrontendApplicationStateService;
-  @inject(NvimWidget) protected readonly nvimWidget!: NvimWidget;
+  @inject(TilingLayoutService) protected readonly tilingLayoutService!: TilingLayoutService;
   @inject(FileNavigatorContribution) protected readonly navigatorContribution!: FileNavigatorContribution;
   @inject(RemoteConnectionProvider) protected readonly connectionProvider!: ServiceConnectionProvider;
 
-  private started = false;
   private bufferWatchActive = false;
 
   onStart(): void {
-    this.modeService.registerActivator(this);
-
-    // Wait for 'ready' state then activate the editor mode.
-    // reachedState returns a Deferred that resolves when state >= 'ready'.
-    // This is safe here because onStart() runs during 'startContributions'
-    // which is before 'ready', so the deferred will resolve later.
-    this.stateService.reachedState('ready').then(() => {
-      this.modeService.activate(this.modeService.currentMode, { startup: true })
-        .catch(err => {
-          this.messageService.error('Mineo: failed to activate editor mode: ' + err);
-        });
+    window.addEventListener('beforeunload', () => {
+      this.tilingLayoutService.saveAllSizes();
     });
-  }
 
-  // ── ModeActivator implementation ──────────────────────────────────────────
-
-  async activateNeovimMode(startup: boolean): Promise<void> {
-    // Step 0: dirty-check (skipped on startup — no user-created editor state yet)
-    if (!startup) {
-      const dirty = this.editorManager.all.filter(w => w.saveable.dirty);
-      if (dirty.length > 0) {
-        throw new Error('Save or discard Monaco changes before switching to Neovim.');
-      }
-      // Close Monaco editor widgets from the main panel
-      const mainWidgets = Array.from(
-        (this.shell.mainPanel as any).widgets() as IterableIterator<Widget>
-      ).filter(w => w instanceof EditorWidget);
-      await Promise.all(mainWidgets.map(w => this.shell.closeWidget(w.id)));
-    }
-
-    // Step 1: start the NvimWidget PTY connection (only once)
-    if (!this.started) {
-      await this.nvimWidget.start();
-      this.started = true;
-    }
-
-    // Step 2: add to shell and activate
-    this.shell.addWidget(this.nvimWidget, { area: 'main' });
-    this.shell.activateWidget(this.nvimWidget.id);
-
-    // Step 3: poll /api/nvim-ready (non-fatal; never throws)
-    await this._waitForNvimReady();
-
-    // Step 4: start buffer-watch to sync explorer selection (only once)
-    if (!this.bufferWatchActive) {
-      this.bufferWatchActive = true;
-      this._startBufferWatch();
-    }
-  }
-
-  async activateMonacoMode(): Promise<void> {
-    // Do NOT close/detach the nvim widget — closeWidget() removes it from the
-    // DOM, which causes xterm's IntersectionObserver to cancel its canvas render
-    // loop, resulting in a black screen when switching back to neovim.
-    // The nvim widget stays attached; Monaco editor widgets added to the main
-    // area will become the active tab, visually covering neovim.
+    this.stateService.reachedState('ready').then(() => {
+      this.tilingLayoutService.buildInitialLayout()
+        .then(() => {
+          if (!this.bufferWatchActive) {
+            this.bufferWatchActive = true;
+            this._startBufferWatch();
+          }
+        })
+        .catch(err => this.messageService.error('Mineo: failed to build layout: ' + err));
+    });
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
 
   private _startBufferWatch(): void {
+    // Connect buffer-watch to the primary editor PTY
+    // Use the legacy path as fallback — the backend routes it to primary
     this.connectionProvider.listen('/services/nvim-buffer-watch', (_path, channel) => {
       channel.onMessage(e => {
         const filePath = e().readString();
@@ -268,36 +196,12 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
       });
     }, false);
   }
-
-  private async _waitForNvimReady(): Promise<void> {
-    const POLL_MS = 200;
-    const MAX_POLLS = 25; // up to ~5 seconds (25 polls × 200ms sleep between attempts)
-    for (let i = 0; i < MAX_POLLS; i++) {
-      try {
-        const res = await fetch('/api/nvim-ready');
-        if (res.ok) {
-          const body = await res.json() as { ready: boolean };
-          if (body.ready) return;
-        }
-      } catch {
-        // Network error — treat as "not ready yet"
-      }
-      // Sleep between polls (not after the final one)
-      if (i < MAX_POLLS - 1) {
-        await new Promise(resolve => setTimeout(resolve, POLL_MS));
-      }
-    }
-    // Timeout — non-fatal toast
-    this.messageService.warn(
-      'Neovim socket not ready — file opens may not work until nvim initialises.'
-    );
-  }
 }
 
 /**
  * NvimOpenHandler intercepts file-open events from the File Explorer.
- * In neovim mode: forwards to /api/nvim-open with priority 500.
- * In monaco mode: returns -1 (opts out; Theia uses default Monaco handler).
+ * Always forwards file URIs to /api/nvim-open with priority 500,
+ * targeting the currently focused pane via instanceId.
  */
 @injectable()
 class NvimOpenHandler implements OpenHandler {
@@ -305,17 +209,27 @@ class NvimOpenHandler implements OpenHandler {
   readonly label = 'Open in Neovim';
 
   @inject(MessageService) protected readonly messageService!: MessageService;
-  @inject(ModeService) protected readonly modeService!: ModeService;
+  @inject(TilingLayoutService) protected readonly tilingLayoutService!: TilingLayoutService;
+  @inject(LayoutTreeManager) protected readonly layoutTreeManager!: LayoutTreeManager;
 
   canHandle(uri: URI): number {
     if (uri.scheme !== 'file') return -1;
-    return this.modeService.currentMode === 'neovim' ? 500 : -1;
+    return 500;
   }
 
   async open(uri: URI): Promise<object | undefined> {
     const filePath = uri.path.toString();
     try {
-      const res = await fetch('/api/nvim-open?file=' + encodeURIComponent(filePath));
+      // Build URL — target the focused pane's nvim instance if known
+      let url = '/api/nvim-open?file=' + encodeURIComponent(filePath);
+      const focusedLeafId = this.layoutTreeManager.focusedLeafId;
+      if (focusedLeafId) {
+        const found = this.layoutTreeManager.findLeaf(focusedLeafId);
+        if (found && found.leaf.role === 'editor') {
+          url += '&instanceId=' + encodeURIComponent(found.leaf.instanceId);
+        }
+      }
+      const res = await fetch(url);
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
         this.messageService.warn('Neovim: ' + (body.error ?? 'HTTP ' + res.status));
@@ -330,73 +244,161 @@ class NvimOpenHandler implements OpenHandler {
 }
 
 /**
- * EditorModeStatusBarContribution shows the current editor mode (NEOVIM / MONACO)
- * in the status bar and registers the `mineo.toggleEditorMode` command.
+ * NavigatorTilingContribution — adds tiling-related context menu items to the
+ * file explorer: "Open in New Pane", split/close pane, tab operations.
+ * Always available regardless of editor mode.
  */
 @injectable()
-class EditorModeStatusBarContribution implements FrontendApplicationContribution {
-  @inject(ModeService) protected readonly modeService!: ModeService;
-  @inject(StatusBar) protected readonly statusBar!: StatusBar;
-  @inject(CommandRegistry) protected readonly commands!: CommandRegistry;
-  @inject(MessageService) protected readonly messageService!: MessageService;
+class NavigatorTilingContribution implements CommandContribution, MenuContribution {
+  static readonly OPEN_IN_NEW_PANE = 'mineo.openInNewPane';
 
-  private static readonly STATUS_BAR_ID = 'mineo.editorMode';
-  private static readonly COMMAND_ID = 'mineo.toggleEditorMode';
-  private readonly _toDispose = new DisposableCollection();
+  @inject(TilingLayoutService) protected readonly tilingLayoutService!: TilingLayoutService;
+  @inject(SelectionService) protected readonly selectionService!: SelectionService;
 
-  onStart(): void {
-    // Register the toggle command — catch async errors so they surface as toasts
-    this.commands.registerCommand(
-      { id: EditorModeStatusBarContribution.COMMAND_ID, label: 'Mineo: Toggle Editor Mode' },
-      { execute: () => this.modeService.toggle().catch(err =>
-          this.messageService.error('Mineo: ' + err)) }
-    );
+  private getSelectedFileUri(): URI | undefined {
+    const uri = UriSelection.getUri(this.selectionService.selection);
+    if (uri && uri.scheme === 'file') {
+      return uri;
+    }
+    return undefined;
+  }
 
-    // Set initial status bar entry
-    this._updateStatusBar(this.modeService.currentMode);
-
-    // Update on every mode change — store disposable to prevent leak
-    this._toDispose.push(
-      this.modeService.onModeChange(mode => this._updateStatusBar(mode))
+  registerCommands(commands: CommandRegistry): void {
+    commands.registerCommand(
+      { id: NavigatorTilingContribution.OPEN_IN_NEW_PANE, label: 'Open in New Pane' },
+      {
+        execute: () => {
+          const uri = this.getSelectedFileUri();
+          if (uri) {
+            this.tilingLayoutService.openFileInNewPane(uri.path.toString());
+          }
+        },
+        isEnabled: () => !!this.getSelectedFileUri(),
+        isVisible: () => !!this.getSelectedFileUri(),
+      },
     );
   }
 
-  onStop(): void {
-    this._toDispose.dispose();
-  }
+  registerMenus(menus: MenuModelRegistry): void {
+    // "Open in New Pane" — for files only (command isVisible hides it when no file selected)
+    menus.registerMenuAction(NavigatorContextMenu.NAVIGATION, {
+      commandId: NavigatorTilingContribution.OPEN_IN_NEW_PANE,
+      label: 'Open in New Pane',
+      order: '0.1',
+      when: '!explorerResourceIsFolder',
+    });
 
-  private _updateStatusBar(mode: EditorMode): void {
-    this.statusBar.setElement(EditorModeStatusBarContribution.STATUS_BAR_ID, {
-      text: mode === 'neovim' ? '$(terminal) NEOVIM' : '$(edit) MONACO',
-      tooltip: 'Click to toggle editor mode',
-      alignment: StatusBarAlignment.LEFT,
-      priority: 1000,
-      command: EditorModeStatusBarContribution.COMMAND_ID,
+    // ── Pane operations ───────────────────────────────────────────────
+    const PANE_GROUP = [...NavigatorContextMenu.NAVIGATION, 'mineo_pane'];
+    menus.registerSubmenu(PANE_GROUP, 'Pane');
+    menus.registerMenuAction(PANE_GROUP, {
+      commandId: 'mineo.split.horizontal',
+      label: 'Split Horizontal',
+      order: 'a',
+    });
+    menus.registerMenuAction(PANE_GROUP, {
+      commandId: 'mineo.split.vertical',
+      label: 'Split Vertical',
+      order: 'b',
+    });
+    menus.registerMenuAction(PANE_GROUP, {
+      commandId: 'mineo.pane.terminal',
+      label: 'Add Terminal',
+      order: 'c',
+    });
+    menus.registerMenuAction(PANE_GROUP, {
+      commandId: 'mineo.pane.close',
+      label: 'Close Pane',
+      order: 'd',
+    });
+
+    // ── Tab operations ────────────────────────────────────────────────
+    const TAB_GROUP = [...NavigatorContextMenu.NAVIGATION, 'mineo_tab'];
+    menus.registerSubmenu(TAB_GROUP, 'Tab');
+    menus.registerMenuAction(TAB_GROUP, {
+      commandId: 'mineo.tab.new',
+      label: 'New Tab',
+      order: 'a',
+    });
+    menus.registerMenuAction(TAB_GROUP, {
+      commandId: 'mineo.tab.close',
+      label: 'Close Tab',
+      order: 'b',
+    });
+    menus.registerMenuAction(TAB_GROUP, {
+      commandId: 'mineo.tab.next',
+      label: 'Next Tab',
+      order: 'c',
+    });
+    menus.registerMenuAction(TAB_GROUP, {
+      commandId: 'mineo.tab.prev',
+      label: 'Previous Tab',
+      order: 'd',
     });
   }
 }
 
 export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
-  // ModeService — singleton that owns editor mode state
-  bind(ModeService).toSelf().inSingletonScope();
+  // PaneRegistry — maps role strings to pane descriptors
+  bind(PaneRegistry).toSelf().inSingletonScope();
 
-  // NvimWidget — singleton BaseWidget with embedded xterm.js (colors baked in)
-  bind(NvimWidget).toSelf().inSingletonScope();
+  // Expose DI container reference for pane descriptors
+  bind('DIContainer').toDynamicValue(ctx => ctx.container).inSingletonScope();
+
+  // Register pane descriptors at module load time
+  bind(FrontendApplicationContribution).toDynamicValue(ctx => {
+    const registry = ctx.container.get(PaneRegistry);
+    registry.register(neovimPaneDescriptor);
+    registry.register(terminalPaneDescriptor);
+    registry.register(monacoPaneDescriptor);
+    return { onStart: () => {} } as any;
+  }).inSingletonScope();
+
+  // NvimWidget factory — creates NvimWidget instances with unique instanceIds
+  bindNvimWidgetFactory(bind);
+
+  // PtyControlService — frontend singleton for spawn/kill requests
+  bind(PtyControlService).toSelf().inSingletonScope();
+
+  // LayoutTreeManager — owns the workspace layout data model
+  bind(LayoutTreeManager).toSelf().inSingletonScope();
+
+  // TilingLayoutService — manages standalone TilingContainer tabs
+  bind(TilingLayoutService).toSelf().inSingletonScope();
+  bind(FrontendApplicationContribution).toService(TilingLayoutService);
+
+  // Tiling commands and keybindings (split, close, navigate, resize, tab ops)
+  bind(TilingCommandContribution).toSelf().inSingletonScope();
+  bind(CommandContribution).toService(TilingCommandContribution);
+  bind(KeybindingContribution).toService(TilingCommandContribution);
 
   // Register the Neovim file opener
   bind(OpenHandler).to(NvimOpenHandler).inSingletonScope();
 
-  // Register terminal startup contribution
-  bind(FrontendApplicationContribution).to(NvimTerminalContribution).inSingletonScope();
+  // Register navigator context menu contributions (Open in New Pane, Pane/Tab submenus)
+  bind(NavigatorTilingContribution).toSelf().inSingletonScope();
+  bind(CommandContribution).toService(NavigatorTilingContribution);
+  bind(MenuContribution).toService(NavigatorTilingContribution);
 
-  // Register status bar + toggle command contribution
-  bind(FrontendApplicationContribution).to(EditorModeStatusBarContribution).inSingletonScope();
+  // Register terminal startup contribution (manages tiling layout)
+  bind(NvimTerminalContribution).toSelf().inSingletonScope();
+  bind(FrontendApplicationContribution).toService(NvimTerminalContribution);
+
+  // Settings panel (bottom-left Manage gear / Cmd+,)
+  bind(SettingsContribution).toSelf().inSingletonScope();
+  bind(FrontendApplicationContribution).toService(SettingsContribution);
+  bind(CommandContribution).toService(SettingsContribution);
+  bind(KeybindingContribution).toService(SettingsContribution);
+  bind(MenuContribution).toService(SettingsContribution);
+
+  // Neovim preferences — adds "Extensions › Neovim" to Theia's Preferences panel
+  bind(NvimPreferenceContribution).toSelf().inSingletonScope();
+  bind(PreferenceContribution).toService(NvimPreferenceContribution);
+  bind(NvimPreferenceSyncContribution).toSelf().inSingletonScope();
+  bind(FrontendApplicationContribution).toService(NvimPreferenceSyncContribution);
 
   // Touch scroll for Theia panels (explorer, sidebars)
   bind(FrontendApplicationContribution).to(TouchScrollContribution).inSingletonScope();
-
-  // Menu bar collapse/expand toggle
-  bind(FrontendApplicationContribution).to(MenuBarToggleContribution).inSingletonScope();
 
   // Monarch syntax highlighting — native Monaco line-by-line tokenizer
   bind(MonarchTokenizer).toSelf().inSingletonScope();
