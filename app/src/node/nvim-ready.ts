@@ -1,6 +1,6 @@
 import net from 'net';
 
-const NVIM_SOCK = '/tmp/nvim.sock';
+const NVIM_SOCK = '/tmp/mineo-nvim.sock';
 
 /**
  * Check whether the nvim RPC socket is accepting connections.
@@ -14,7 +14,7 @@ const NVIM_SOCK = '/tmp/nvim.sock';
  * The nvim msgpack-RPC socket does not send a greeting; connection success
  * is sufficient to confirm nvim is ready to accept RPC calls.
  *
- * @param sockPath Path to the Unix socket (defaults to /tmp/nvim.sock)
+ * @param sockPath Path to the Unix socket (defaults to /tmp/mineo-nvim.sock)
  * @param timeoutMs Connection timeout in milliseconds (defaults to 500)
  * @returns true if connection succeeded, false on any error or timeout
  */

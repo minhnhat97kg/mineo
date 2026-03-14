@@ -18,8 +18,8 @@
  *   Mineo's model is simpler: language servers are installed on the host PATH,
  *   and the WebSocket bridge (LspServerManager) connects to them.
  *
- * This implementation speaks LSP directly using only vscode-jsonrpc (no vscode
- * dependency) for message framing plus monaco.languages.* for provider registration.
+ * This implementation speaks LSP directly using raw JSON-RPC over WebSocket,
+ * with Content-Length framing and monaco.languages.* for provider registration.
  */
 
 import { injectable, inject, LazyServiceIdentifier } from '@theia/core/shared/inversify';
@@ -88,7 +88,7 @@ class LspFramer {
             const contentLength = parseInt(clEntry.slice(CONTENT_LENGTH.length), 10);
             if (isNaN(contentLength)) break;
 
-            // Measure byte offset of body start (header might be non-ASCII... but in practice isn't)
+            // Measure byte offset of body start (header is ASCII, so char == byte here)
             const headerBytes = encoder.encode(raw.slice(0, sepIdx + HEADER_SEP.length));
             const totalNeeded = headerBytes.length + contentLength;
             if (this._buf.length < totalNeeded) break;
@@ -171,7 +171,7 @@ class LspSession implements Disposable {
 
     private _handleMessage(msg: LspMessage): void {
         if (msg.id !== undefined && !msg.method) {
-            // Response
+            // Response to one of our requests
             const pending = this._pending.get(msg.id);
             if (!pending) return;
             this._pending.delete(msg.id);
@@ -181,7 +181,11 @@ class LspSession implements Disposable {
                 pending.resolve(msg.result);
             }
         } else if (msg.method) {
-            // Notification or server request
+            // Server-initiated notification or request
+            // If the server sends a request (has id + method), reply with no-op
+            if (msg.id !== undefined) {
+                this._send({ jsonrpc: '2.0', id: msg.id, result: null });
+            }
             for (const h of this._notifHandlers) h(msg.method, msg.params);
         }
     }
@@ -215,17 +219,34 @@ class LspSession implements Disposable {
         await this.sendRequest('initialize', {
             processId: null,
             rootUri,
+            rootPath: rootUri.replace(/^file:\/\//, ''),
             workspaceFolders,
             capabilities: {
                 textDocument: {
-                    hover: { contentFormat: ['markdown', 'plaintext'] },
-                    completion: {
-                        completionItem: { snippetSupport: false, documentationFormat: ['markdown', 'plaintext'] },
+                    synchronization: {
+                        dynamicRegistration: false,
+                        willSave: false,
+                        willSaveWaitUntil: false,
+                        didSave: false,
                     },
-                    definition: {},
-                    publishDiagnostics: {},
+                    hover: {
+                        dynamicRegistration: false,
+                        contentFormat: ['markdown', 'plaintext'],
+                    },
+                    completion: {
+                        dynamicRegistration: false,
+                        completionItem: {
+                            snippetSupport: false,
+                            documentationFormat: ['markdown', 'plaintext'],
+                        },
+                    },
+                    definition: { dynamicRegistration: false },
+                    publishDiagnostics: { relatedInformation: false },
                 },
-                workspace: { workspaceFolders: true },
+                workspace: {
+                    workspaceFolders: true,
+                    didChangeConfiguration: { dynamicRegistration: false },
+                },
             },
         });
         this.sendNotification('initialized', {});
@@ -262,6 +283,13 @@ function toLspPos(p: monaco.Position): { line: number; character: number } {
     return { line: p.lineNumber - 1, character: p.column - 1 };
 }
 
+/**
+ * Convert a Monaco model URI to the LSP document URI.
+ *
+ * Theia opens files as file:// URIs but the monaco URI object stringifies to
+ * the same form.  We normalise to ensure a clean file:// string is sent to
+ * the language server so it can map the URI back to a filesystem path.
+ */
 function modelToLspUri(model: monaco.editor.ITextModel): string {
     return model.uri.toString();
 }
@@ -269,16 +297,19 @@ function modelToLspUri(model: monaco.editor.ITextModel): string {
 function registerProviders(
     session: LspSession,
     lang: string,
-    openDocs: Set<string>,
+    openDocs: Map<string, number>,   // uri → version
     toDispose: DisposableCollection,
 ): void {
-    const selector = [{ language: lang, scheme: 'file' }];
+    // Match both 'file' and any other scheme Theia may use (e.g. 'theia-resource')
+    // so providers activate regardless of how the model was created.
+    const selector = [{ language: lang }];
 
-    // ── Sync open/change/close ────────────────────────────────────────────────
+    // ── textDocument sync helpers ─────────────────────────────────────────────
+
     function syncOpen(model: monaco.editor.ITextModel): void {
         const uri = modelToLspUri(model);
         if (openDocs.has(uri)) return;
-        openDocs.add(uri);
+        openDocs.set(uri, model.getVersionId());
         session.sendNotification('textDocument/didOpen', {
             textDocument: {
                 uri,
@@ -289,17 +320,74 @@ function registerProviders(
         });
     }
 
-    // Sync all already-open models
+    function syncChange(model: monaco.editor.ITextModel): void {
+        const uri = modelToLspUri(model);
+        if (!openDocs.has(uri)) {
+            syncOpen(model);
+            return;
+        }
+        const version = model.getVersionId();
+        openDocs.set(uri, version);
+        session.sendNotification('textDocument/didChange', {
+            textDocument: { uri, version },
+            contentChanges: [{ text: model.getValue() }],
+        });
+    }
+
+    function syncClose(model: monaco.editor.ITextModel): void {
+        const uri = modelToLspUri(model);
+        if (!openDocs.has(uri)) return;
+        openDocs.delete(uri);
+        session.sendNotification('textDocument/didClose', {
+            textDocument: { uri },
+        });
+    }
+
+    // Sync all already-open models for this language
     for (const model of monaco.editor.getModels()) {
         if (LANG_ENDPOINT[model.getLanguageId()] === LANG_ENDPOINT[lang]) {
             syncOpen(model);
         }
     }
 
+    // Watch for new models
     toDispose.push(monaco.editor.onDidCreateModel(model => {
         if (!session.isReady) return;
         if (LANG_ENDPOINT[model.getLanguageId()] === LANG_ENDPOINT[lang]) {
             syncOpen(model);
+        }
+    }));
+
+    // Watch for content changes on existing and future editors.
+    // onDidChangeModelContent is on the editor instance, not the namespace,
+    // so we subscribe via onDidCreateEditor for editors created after our
+    // session starts and iterate current editors for already-open ones.
+    function attachChangeListener(editor: monaco.editor.ICodeEditor): void {
+        const editorDisposable = editor.onDidChangeModelContent(() => {
+            if (!session.isReady) return;
+            const model = editor.getModel();
+            if (!model) return;
+            if (LANG_ENDPOINT[model.getLanguageId()] === LANG_ENDPOINT[lang]) {
+                syncChange(model);
+            }
+        });
+        toDispose.push(editorDisposable);
+    }
+
+    // Attach to already-open editors
+    for (const editor of monaco.editor.getEditors()) {
+        attachChangeListener(editor);
+    }
+
+    // Attach to future editors
+    toDispose.push(monaco.editor.onDidCreateEditor(editor => {
+        attachChangeListener(editor);
+    }));
+
+    // Watch for model disposal
+    toDispose.push(monaco.editor.onWillDisposeModel(model => {
+        if (LANG_ENDPOINT[model.getLanguageId()] === LANG_ENDPOINT[lang]) {
+            syncClose(model);
         }
     }));
 
@@ -356,7 +444,13 @@ function registerProviders(
                     documentation?: string | { value: string };
                     insertText?: string;
                     insertTextFormat?: number;
-                    textEdit?: { newText: string; range: { start: { line: number; character: number }; end: { line: number; character: number } } };
+                    textEdit?: {
+                        newText: string;
+                        range: {
+                            start: { line: number; character: number };
+                            end: { line: number; character: number };
+                        };
+                    };
                 };
 
                 const result = await session.sendRequest<{
@@ -408,10 +502,16 @@ function registerProviders(
                 syncOpen(model);
                 const result = await session.sendRequest<Array<{
                     uri: string;
-                    range: { start: { line: number; character: number }; end: { line: number; character: number } };
+                    range: {
+                        start: { line: number; character: number };
+                        end: { line: number; character: number };
+                    };
                 }> | {
                     uri: string;
-                    range: { start: { line: number; character: number }; end: { line: number; character: number } };
+                    range: {
+                        start: { line: number; character: number };
+                        end: { line: number; character: number };
+                    };
                 } | null>('textDocument/definition', {
                     textDocument: { uri: modelToLspUri(model) },
                     position: toLspPos(position),
@@ -443,12 +543,28 @@ export class LspClientManager implements FrontendApplicationContribution {
     private readonly _starting = new Set<string>();
     private readonly _toDispose = new DisposableCollection();
     private _stopped = false;
+    private _workspaceRoot: string | null = null;
 
     onStart(): void {
+        // Fetch the workspace root from the backend once so LSP initialisation
+        // sends a real file:// URI to language servers.
+        this._fetchWorkspaceRoot().then(() => {
+            // If already in monaco mode when we start, kick off connections now.
+            if (this.modeService.currentMode === 'monaco') {
+                this._startForOpenEditors();
+            }
+        });
+
         this._toDispose.push(
             this.modeService.onModeChange(mode => {
                 if (mode === 'neovim') {
-                    this._disposeAll();
+                    // Don't tear down LSP sessions when switching to neovim.
+                    // The language server processes keep running on the backend,
+                    // and the sessions will be reused when switching back to monaco.
+                    // Disposing here causes the next monaco-mode connection to send
+                    // a duplicate initialize request which language servers reject
+                    // with -32600 "initialize called while server in initialized state".
+                    return;
                 } else {
                     this._startForOpenEditors();
                 }
@@ -467,6 +583,30 @@ export class LspClientManager implements FrontendApplicationContribution {
         this._stopped = true;
         this._disposeAll();
         this._toDispose.dispose();
+    }
+
+    private async _fetchWorkspaceRoot(): Promise<void> {
+        try {
+            const res = await fetch('/api/workspace');
+            if (res.ok) {
+                const body = await res.json() as { workspace?: string };
+                if (body.workspace) {
+                    this._workspaceRoot = body.workspace;
+                    console.log(`[LspClientManager] workspace root: ${this._workspaceRoot}`);
+                }
+            }
+        } catch (e) {
+            console.warn('[LspClientManager] Could not fetch workspace root:', e);
+        }
+    }
+
+    private _workspaceUri(): string {
+        if (this._workspaceRoot) {
+            // Encode path into a proper file:// URI
+            return 'file://' + this._workspaceRoot;
+        }
+        // Fallback — language servers will be limited but at least won't crash
+        return 'file:///tmp/workspace';
     }
 
     private _startForOpenEditors(): void {
@@ -491,11 +631,15 @@ export class LspClientManager implements FrontendApplicationContribution {
             const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
             const url = `${proto}://${window.location.host}/lsp/${endpoint}`;
 
+            console.log(`[LspClientManager] connecting to ${url}`);
             const ws = new WebSocket(url);
 
             const opened = await new Promise<boolean>(resolve => {
                 ws.addEventListener('open', () => resolve(true), { once: true });
-                ws.addEventListener('error', () => resolve(false), { once: true });
+                ws.addEventListener('error', (e) => {
+                    console.warn(`[LspClientManager] WebSocket error for ${endpoint}:`, e);
+                    resolve(false);
+                }, { once: true });
             });
 
             if (!opened || this._stopped) {
@@ -506,8 +650,11 @@ export class LspClientManager implements FrontendApplicationContribution {
             const session = new LspSession(ws);
             this._sessions.set(endpoint, session);
 
-            const rootUri = window.location.origin;
+            const rootUri = this._workspaceUri();
+            console.log(`[LspClientManager] initializing ${endpoint} with rootUri=${rootUri}`);
+
             await session.initialize(rootUri, [{ uri: rootUri, name: 'workspace' }]);
+            console.log(`[LspClientManager] ${endpoint} initialized`);
 
             if (this._stopped || !this._sessions.has(endpoint)) {
                 session.dispose();
@@ -515,7 +662,7 @@ export class LspClientManager implements FrontendApplicationContribution {
             }
 
             const providerDisposables = new DisposableCollection();
-            const openDocs = new Set<string>();
+            const openDocs = new Map<string, number>();
             registerProviders(session, lang, openDocs, providerDisposables);
 
             // Clean up when session closes
@@ -529,6 +676,7 @@ export class LspClientManager implements FrontendApplicationContribution {
 
         } catch (err) {
             console.warn(`[LspClientManager] "${endpoint}" connect failed:`, err);
+            this._sessions.delete(endpoint);
         } finally {
             this._starting.delete(endpoint);
         }

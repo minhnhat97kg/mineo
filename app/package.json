@@ -24,8 +24,8 @@
     "copy-webpack-plugin": "^14.0.0"
   },
   "scripts": {
-    "build": "tsc && theia build --mode development && webpack --config webpack.config.js",
-    "build:prod": "tsc && theia build && webpack --config webpack.config.js"
+    "build": "tsc && theia build && webpack --config webpack.config.js",
+    "build:dev": "tsc && theia build --mode development && webpack --config webpack.config.js"
   },
   "theia": {
     "frontend": {

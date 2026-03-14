@@ -36,14 +36,35 @@ const port = String(cfg.port);
 // This means theia start resolves plugins relative to the app/ working directory.
 const pluginsFlag = 'local-dir:../plugins';
 
-// theia start <workspace> --port <port> --plugins local-dir:../plugins
+// Seed ~/.theia/recentworkspace.json with cfg.workspace on first run only (empty list).
+// After "Open Folder", Theia writes the chosen folder as the first entry — we never
+// override that. Without this seed, a fresh install would open with no workspace.
+const recentWorkspacePath = path.join(os.homedir(), '.theia', 'recentworkspace.json');
+try {
+  let recentRoots = [];
+  if (fs.existsSync(recentWorkspacePath)) {
+    const existing = JSON.parse(fs.readFileSync(recentWorkspacePath, 'utf8'));
+    if (Array.isArray(existing.recentRoots)) recentRoots = existing.recentRoots;
+  }
+  if (recentRoots.length === 0) {
+    fs.mkdirSync(path.dirname(recentWorkspacePath), { recursive: true });
+    fs.writeFileSync(recentWorkspacePath, JSON.stringify({
+      recentRoots: ['file://' + workspace]
+    }));
+  }
+} catch (e) {
+  // Non-fatal — Theia will open without a workspace
+}
+
 // npm workspaces may hoist the theia binary to the root node_modules — fall back to root if not found in app/
 const theiaInApp = path.join(APP_DIR, 'node_modules', '.bin', 'theia');
 const theiaInRoot = path.join(ROOT, 'node_modules', '.bin', 'theia');
 const theia = fs.existsSync(theiaInApp) ? theiaInApp : theiaInRoot;
 
+// Do NOT pass workspace as a positional arg — that would override "Open Folder" selections.
+// Instead we seed recentworkspace.json above so first-run opens cfg.workspace.
 process.chdir(APP_DIR);
-execFileSync(theia, ['start', workspace, '--port', port, '--plugins', pluginsFlag], {
+execFileSync(theia, ['start', '--port', port, '--hostname', '0.0.0.0', '--plugins', pluginsFlag], {
   stdio: 'inherit',
   cwd: APP_DIR,
 });

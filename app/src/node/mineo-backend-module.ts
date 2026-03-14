@@ -9,7 +9,10 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as http from 'http';
 import express = require('@theia/core/shared/express');
-import { execSync } from 'child_process';
+import { execSync, execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 import { Application } from 'express';
 import { loadConfig } from './config';
 import { loadOrCreateSecret } from './secret';
@@ -76,6 +79,7 @@ class MineoBACContribution implements BackendApplicationContribution {
     // Sends a file to the running Neovim instance via its RPC socket.
     // Retries for up to 10s to handle the startup race where nvim is still
     // initialising when the first file-open request arrives.
+    // Uses execFileAsync (non-blocking) so the event loop stays free during retries.
     app.get('/api/nvim-open', async (req, res) => {
       const file = req.query['file'];
       if (typeof file !== 'string' || !file) {
@@ -93,9 +97,8 @@ class MineoBACContribution implements BackendApplicationContribution {
       let lastErr: any;
       for (let i = 0; i < MAX_ATTEMPTS; i++) {
         try {
-          execSync(`"${cfg.nvim.bin}" --server "${NVIM_SOCK}" --remote-silent "${file}"`, {
+          await execFileAsync(cfg.nvim.bin, ['--server', NVIM_SOCK, '--remote-silent', file], {
             timeout: 3000,
-            stdio: 'ignore',
           });
           res.json({ ok: true });
           return;
@@ -108,6 +111,12 @@ class MineoBACContribution implements BackendApplicationContribution {
         }
       }
       res.status(503).json({ error: 'Neovim not running after 10s', detail: lastErr?.message });
+    });
+
+    // /api/workspace — returns the configured workspace root path
+    // Used by the frontend to build file:// URIs for LSP initialization.
+    app.get('/api/workspace', (_req, res) => {
+      res.json({ workspace: cfg.workspace });
     });
 
     // /api/nvim-ready — always returns HTTP 200, even on unexpected errors

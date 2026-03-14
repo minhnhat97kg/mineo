@@ -4,7 +4,7 @@ const main = require('@theia/core/lib/node/main');
 
 BackendApplicationConfigProvider.set({
     "singleInstance": true,
-    "frontendConnectionTimeout": -1,
+    "frontendConnectionTimeout": 300000,
     "configurationFolder": ".theia"
 });
 
@@ -26,6 +26,10 @@ globalThis.extensionInfo = [
         "version": "1.69.0"
     },
     {
+        "name": "@theia/messages",
+        "version": "1.69.0"
+    },
+    {
         "name": "@theia/workspace",
         "version": "1.69.0"
     },
@@ -43,18 +47,6 @@ globalThis.extensionInfo = [
     },
     {
         "name": "@theia/navigator",
-        "version": "1.69.0"
-    },
-    {
-        "name": "@theia/process",
-        "version": "1.69.0"
-    },
-    {
-        "name": "@theia/file-search",
-        "version": "1.69.0"
-    },
-    {
-        "name": "@theia/terminal",
         "version": "1.69.0"
     },
     {
@@ -82,6 +74,18 @@ globalThis.extensionInfo = [
         "version": "1.69.0"
     },
     {
+        "name": "@theia/process",
+        "version": "1.69.0"
+    },
+    {
+        "name": "@theia/file-search",
+        "version": "1.69.0"
+    },
+    {
+        "name": "@theia/terminal",
+        "version": "1.69.0"
+    },
+    {
         "name": "@theia/userstorage",
         "version": "1.69.0"
     },
@@ -99,10 +103,6 @@ globalThis.extensionInfo = [
     },
     {
         "name": "@theia/editor-preview",
-        "version": "1.69.0"
-    },
-    {
-        "name": "@theia/messages",
         "version": "1.69.0"
     },
     {
@@ -132,6 +132,14 @@ globalThis.extensionInfo = [
     {
         "name": "@theia/plugin-ext",
         "version": "1.69.0"
+    },
+    {
+        "name": "@theia/plugin-ext-vscode",
+        "version": "1.69.0"
+    },
+    {
+        "name": "mineo-app",
+        "version": "1.0.0"
     }
 ];
 

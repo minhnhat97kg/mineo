@@ -81,26 +81,26 @@ module.exports = (async () => {
         await load(container, require('@theia/filesystem/lib/browser/filesystem-frontend-module'));
         await load(container, require('@theia/filesystem/lib/browser/download/file-download-frontend-module'));
         await load(container, require('@theia/filesystem/lib/browser/file-dialog/file-dialog-module'));
+        await load(container, require('@theia/messages/lib/browser/messages-frontend-module'));
         await load(container, require('@theia/workspace/lib/browser/workspace-frontend-module'));
         await load(container, require('@theia/markers/lib/browser/problem/problem-frontend-module'));
         await load(container, require('@theia/outline-view/lib/browser/outline-view-frontend-module'));
         await load(container, require('@theia/monaco/lib/browser/monaco-frontend-module'));
         await load(container, require('@theia/navigator/lib/browser/navigator-frontend-module'));
-        await load(container, require('@theia/process/lib/common/process-common-module'));
-        await load(container, require('@theia/file-search/lib/browser/file-search-frontend-module'));
-        await load(container, require('@theia/terminal/lib/browser/terminal-frontend-module'));
         await load(container, require('@theia/output/lib/browser/output-frontend-module'));
         await load(container, require('@theia/ai-core/lib/browser/ai-core-frontend-module'));
         await load(container, require('@theia/ai-mcp/lib/browser/mcp-frontend-module'));
         await load(container, require('@theia/bulk-edit/lib/browser/bulk-edit-frontend-module'));
         await load(container, require('@theia/callhierarchy/lib/browser/callhierarchy-frontend-module'));
         await load(container, require('@theia/console/lib/browser/console-frontend-module'));
+        await load(container, require('@theia/process/lib/common/process-common-module'));
+        await load(container, require('@theia/file-search/lib/browser/file-search-frontend-module'));
+        await load(container, require('@theia/terminal/lib/browser/terminal-frontend-module'));
         await load(container, require('@theia/userstorage/lib/browser/user-storage-frontend-module'));
         await load(container, require('@theia/task/lib/browser/task-frontend-module'));
         await load(container, require('@theia/test/lib/browser/view/test-view-frontend-module'));
         await load(container, require('@theia/debug/lib/browser/debug-frontend-module'));
         await load(container, require('@theia/editor-preview/lib/browser/editor-preview-frontend-module'));
-        await load(container, require('@theia/messages/lib/browser/messages-frontend-module'));
         await load(container, require('@theia/notebook/lib/browser/notebook-frontend-module'));
         await load(container, require('@theia/preferences/lib/browser/preference-frontend-module'));
         await load(container, require('@theia/scm/lib/browser/scm-frontend-module'));
@@ -108,8 +108,9 @@ module.exports = (async () => {
         await load(container, require('@theia/timeline/lib/browser/timeline-frontend-module'));
         await load(container, require('@theia/typehierarchy/lib/browser/typehierarchy-frontend-module'));
         await load(container, require('@theia/plugin-ext/lib/plugin-ext-frontend-module'));
-        await load(container, require('../../lib/browser/mineo-frontend-module'));
-
+        await load(container, require('@theia/plugin-ext-vscode/lib/browser/plugin-vscode-frontend-module'));
+        await load(container, require('mineo-app/lib/browser/mineo-frontend-module'));
+        
         MonacoInit.init(container);
         ;
         await start();

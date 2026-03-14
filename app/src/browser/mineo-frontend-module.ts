@@ -23,6 +23,7 @@ import { FileNavigatorContribution } from '@theia/navigator/lib/browser/navigato
 import { NvimWidget } from './neovim-widget';
 import { ModeService, ModeActivator, EditorMode } from './mode-service';
 import { MonarchTokenizer } from './monarch-tokenizer';
+import { LspClientManager } from './lsp-client-manager';
 
 // Increase disconnected buffer size to 50MB (default is 100KB)
 // to prevent "Max disconnected buffer size exceeded" errors when backgrounded
@@ -247,11 +248,11 @@ class NvimTerminalContribution implements FrontendApplicationContribution, ModeA
   }
 
   async activateMonacoMode(): Promise<void> {
-    // Hide the nvim widget (don't dispose — keep the PTY alive)
-    if (this.nvimWidget.isAttached) {
-      this.shell.closeWidget(this.nvimWidget.id);
-    }
-    // Monaco area is already empty — NvimOpenHandler returns -1 in monaco mode
+    // Do NOT close/detach the nvim widget — closeWidget() removes it from the
+    // DOM, which causes xterm's IntersectionObserver to cancel its canvas render
+    // loop, resulting in a black screen when switching back to neovim.
+    // The nvim widget stays attached; Monaco editor widgets added to the main
+    // area will become the active tab, visually covering neovim.
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
@@ -400,6 +401,10 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   // Monarch syntax highlighting — native Monaco line-by-line tokenizer
   bind(MonarchTokenizer).toSelf().inSingletonScope();
   bind(FrontendApplicationContribution).to(MonarchTokenizer).inSingletonScope();
+
+  // LSP client — raw JSON-RPC over WebSocket for hover/completion/definition
+  bind(LspClientManager).toSelf().inSingletonScope();
+  bind(FrontendApplicationContribution).to(LspClientManager).inSingletonScope();
 
   // Suppress breadcrumbs
   try {

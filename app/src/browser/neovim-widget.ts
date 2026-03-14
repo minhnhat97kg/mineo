@@ -5,7 +5,6 @@ import { Channel, Disposable, DisposableCollection } from '@theia/core';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { TouchGestureHandler } from './touch-gesture-handler';
-import { TouchToolbar } from './touch-toolbar';
 
 @injectable()
 export class NvimWidget extends BaseWidget {
@@ -29,6 +28,11 @@ export class NvimWidget extends BaseWidget {
         this.title.closable = false;
         this.title.iconClass = 'fa fa-terminal';
         this.addClass('nvim-widget');
+        // Make the root node focusable so Theia's assertActivated check
+        // (widget.node.contains(document.activeElement)) passes immediately
+        // when onActivateRequest calls this.node.focus() before xterm's inner
+        // textarea has focus. Without tabIndex=-1 the node cannot receive focus.
+        this.node.tabIndex = -1;
 
         // Minimal xterm theme: only background/cursor/selection.
         // With COLORTERM=truecolor, nvim uses termguicolors and emits raw
@@ -113,31 +117,46 @@ export class NvimWidget extends BaseWidget {
         if (!this.termOpened) {
             this.term.open(this.node);
             this.termOpened = true;
-            this.term.focus();
-            this.fitAndResize();
 
             // Touch support — only attach when a touch device is detected
             if (window.matchMedia('(pointer: coarse)').matches) {
                 const gestureHandler = new TouchGestureHandler(this.node, this.term, () => this.fitAndResize());
                 this.toDispose.push(gestureHandler);
-
-                const enc = new TextEncoder();
-                const toolbar = new TouchToolbar(this.node, {
-                    sendKey: (data: string) => {
-                        if (this.dataChannel) {
-                            this.dataChannel.getWriteBuffer()
-                                .writeBytes(enc.encode(data))
-                                .commit();
-                        }
-                    },
-                });
-                this.toDispose.push(toolbar);
             }
         }
+        // On every attach (including re-attaches after monaco → neovim switch):
+        // 1. fit+resize so the terminal fills its container at the correct size
+        // 2. force a full xterm canvas repaint — the IntersectionObserver inside
+        //    xterm cancels rendering while detached, leaving a black screen on
+        //    re-attach until something triggers a repaint
+        // 3. send Ctrl-L to nvim to redraw its screen content into the terminal
+        // 4. focus so Theia's assertActivated check passes immediately
+        requestAnimationFrame(() => {
+            this.fitAndResize();
+            this.term.refresh(0, this.term.rows - 1);
+            // Ctrl-L: tell nvim to redraw (only useful after first attach)
+            if (this.dataChannel) {
+                const ctrlL = new Uint8Array([0x0c]);
+                this.dataChannel.getWriteBuffer().writeBytes(ctrlL).commit();
+            }
+            this.term.focus();
+        });
+    }
+
+    protected override onAfterShow(msg: Message): void {
+        super.onAfterShow(msg);
+        // onAfterShow fires when the widget becomes visible after being hidden
+        // (e.g. tab switch). Refresh to repaint the canvas.
+        this.fitAndResize();
+        this.term.refresh(0, this.term.rows - 1);
     }
 
     protected override onActivateRequest(msg: Message): void {
         super.onActivateRequest(msg);
+        // Focus widget.node itself first so Theia's assertActivated check
+        // (which polls widget.node.contains(document.activeElement)) passes
+        // immediately, then hand off to xterm which focuses its inner textarea.
+        this.node.focus();
         this.term.focus();
     }
 

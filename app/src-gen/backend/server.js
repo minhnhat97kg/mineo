@@ -55,27 +55,28 @@ module.exports = async (port, host, argv) => {
         await load(require('@theia/editor/lib/node/editor-backend-module'));
         await load(require('@theia/filesystem/lib/node/filesystem-backend-module'));
         await load(require('@theia/filesystem/lib/node/download/file-download-backend-module'));
+        await load(require('@theia/messages/lib/node/messages-backend-module'));
         await load(require('@theia/workspace/lib/node/workspace-backend-module'));
         await load(require('@theia/markers/lib/node/problem-backend-module'));
         await load(require('@theia/navigator/lib/node/navigator-backend-module'));
+        await load(require('@theia/output/lib/node/output-backend-module'));
+        await load(require('@theia/ai-core/lib/node/ai-core-backend-module'));
+        await load(require('@theia/ai-mcp/lib/node/mcp-backend-module'));
         await load(require('@theia/process/lib/common/process-common-module'));
         await load(require('@theia/process/lib/node/process-backend-module'));
         await load(require('@theia/file-search/lib/node/file-search-backend-module'));
         await load(require('@theia/terminal/lib/node/terminal-backend-module'));
-        await load(require('@theia/output/lib/node/output-backend-module'));
-        await load(require('@theia/ai-core/lib/node/ai-core-backend-module'));
-        await load(require('@theia/ai-mcp/lib/node/mcp-backend-module'));
         await load(require('@theia/task/lib/node/task-backend-module'));
         await load(require('@theia/test/lib/node/test-backend-module'));
         await load(require('@theia/debug/lib/node/debug-backend-module'));
         await load(require('@theia/editor-preview/lib/node/editor-preview-backend-module'));
-        await load(require('@theia/messages/lib/node/messages-backend-module'));
         await load(require('@theia/notebook/lib/node/notebook-backend-module'));
         await load(require('@theia/preferences/lib/node/preference-backend-module'));
         await load(require('@theia/scm/lib/node/scm-backend-module'));
         await load(require('@theia/search-in-workspace/lib/node/search-in-workspace-backend-module'));
         await load(require('@theia/plugin-ext/lib/plugin-ext-backend-module'));
-        await load(require('../../lib/node/mineo-backend-module'));
+        await load(require('@theia/plugin-ext-vscode/lib/node/plugin-vscode-backend-module'));
+        await load(require('mineo-app/lib/node/mineo-backend-module'));
         return await start(port, host, argv);
     } catch (error) {
         if (typeof error !== 'number') {

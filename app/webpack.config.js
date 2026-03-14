@@ -17,21 +17,15 @@ configs[0].module.rules.push({
     loader: require.resolve('@theia/application-manager/lib/expose-loader')
 }); */
 
-// web-tree-sitter conditionally requires 'fs' only in Node environments but
-// webpack resolves it statically. Stub it out for the browser bundle.
-configs[0].resolve = configs[0].resolve || {};
-configs[0].resolve.fallback = Object.assign({}, configs[0].resolve.fallback, {
-    'fs': false,
-});
-
-// Copy tree-sitter WASM grammar files to the output directory so they are
-// served at runtime URLs like /grammars/tree-sitter-typescript.wasm
+// Copy index.html to the output directory so express.static(lib/frontend)
+// can serve it for GET /
 configs[0].plugins = (configs[0].plugins || []).concat([
     new CopyPlugin({
         patterns: [
             {
-                from: path.resolve(__dirname, 'static/grammars'),
-                to: 'grammars',
+                // index.html is not emitted by webpack — copy it explicitly so
+                // express.static(lib/frontend) can serve it for GET /
+                from: path.resolve(__dirname, 'src-gen/frontend/index.html'),
             },
         ],
     }),

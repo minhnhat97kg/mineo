@@ -23,7 +23,7 @@ const commonJsLibraries = {};
 for (const [entryPointName, entryPointPath] of Object.entries({
     'backend-init-theia': '@theia/plugin-ext/lib/hosted/node/scanners/backend-init-theia',
     'parcel-watcher': '@theia/filesystem/lib/node/parcel-watcher',
-    
+    'plugin-vscode-init': '@theia/plugin-ext-vscode/lib/node/plugin-vscode-init',
     
     
 })) {

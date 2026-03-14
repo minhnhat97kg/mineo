@@ -4,4 +4,11 @@ dist/
 config.json
 .secret
 plugins/*.vsix
+plugins/vscode-neovim/
 test-results/
+
+# Theia-generated build artifacts (live in app/, not root)
+/src-gen/
+/gen-webpack.config.js
+/gen-webpack.node.config.js
+/webpack.config.js
