@@ -1,7 +1,7 @@
 import { injectable, inject, LazyServiceIdentifier } from '@theia/core/shared/inversify';
 import { FrontendApplicationContribution } from '@theia/core/lib/browser';
 import * as monaco from '@theia/monaco-editor-core';
-import Parser from 'web-tree-sitter';
+import { Parser, Language, Node } from 'web-tree-sitter';
 import { Disposable } from '@theia/core/lib/common/disposable';
 import { ModeService } from './mode-service';
 
@@ -134,7 +134,7 @@ export class TreesitterManager implements FrontendApplicationContribution {
         tokenMap: Record<string, string>,
     ): Promise<void> {
         try {
-            const language = await Parser.Language.load(wasmPath);
+            const language = await Language.load(wasmPath);
             const parser = new Parser();
             parser.setLanguage(language);
             this._parsers.set(lang, parser);
@@ -146,10 +146,13 @@ export class TreesitterManager implements FrontendApplicationContribution {
 
                 tokenize(line: string, state: monaco.languages.IState): monaco.languages.ILineTokens {
                     const tree = parser.parse(line);
+                    if (!tree) {
+                        return { tokens: [], endState: state };
+                    }
                     const tokens: monaco.languages.IToken[] = [];
                     const seenStarts = new Set<number>();
 
-                    function walk(node: Parser.SyntaxNode): void {
+                    function walk(node: Node): void {
                         if (node.isNamed && node.childCount === 0 && tokenMap[node.type] !== undefined) {
                             const startIndex = node.startIndex;
                             if (!seenStarts.has(startIndex)) {
@@ -161,7 +164,7 @@ export class TreesitterManager implements FrontendApplicationContribution {
                             }
                         }
                         for (const child of node.children) {
-                            walk(child);
+                            if (child) walk(child);
                         }
                     }
 
@@ -178,6 +181,14 @@ export class TreesitterManager implements FrontendApplicationContribution {
                     return { tokens, endState: state };
                 },
             };
+
+            // Ensure the language is registered before setting the tokens provider.
+            // Theia registers languages lazily; setTokensProvider throws if the
+            // language ID is unknown at call time.
+            const knownIds = monaco.languages.getLanguages().map(l => l.id);
+            if (!knownIds.includes(lang)) {
+                monaco.languages.register({ id: lang });
+            }
 
             const disposable = monaco.languages.setTokensProvider(lang, provider);
             // Wrap monaco IDisposable in Theia Disposable

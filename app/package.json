@@ -16,7 +16,7 @@
     "monaco-languageclient": "^8.4.0",
     "vscode-jsonrpc": "^8.2.0",
     "vscode-languageclient": "^9.0.1",
-    "web-tree-sitter": "^0.22.6"
+    "web-tree-sitter": "^0.25.0"
   },
   "devDependencies": {
     "@theia/cli": "1.69.0",
