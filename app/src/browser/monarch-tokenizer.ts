@@ -5,15 +5,18 @@
  * - Monaco calls setTokensProvider() line-by-line. TreeSitter needs full document
  *   context; parsing a single line produces almost entirely ERROR nodes, so the
  *   tokenMap lookups never match and nothing gets coloured.
- * - Monarch is Monaco's native line tokenizer: it is a state-machine that carries
- *   state across lines (so multiline strings/comments work), runs synchronously
- *   (no WASM, no async init, no OOM risk), and uses the exact token-type strings
- *   that Monaco's theme trie expects.
+ * - Monarch is Monaco's native line tokenizer: a state-machine that carries
+ *   state across lines (multiline strings/comments work), runs synchronously
+ *   (no WASM, no async init, no OOM risk).
  *
- * Token types must match the scope names present in dark_vs/dark_plus:
- *   comment → #6A9955   string → #ce9178   keyword → #569cd6
- *   constant.numeric → #b5cea8   entity.name.type → #4EC9B0
- *   entity.name.function → #DCDCAA   variable → #9CDCFE
+ * Token names MUST match Monaco's built-in theme trie keys (themes.js):
+ *   'keyword'  → #569CD6   'string'  → #CE9178   'comment' → #608B4E
+ *   'number'   → #B5CEA8   'type'    → #3DC9B0    'tag'     → #569CD6
+ *   'variable' → #74B0DF   'variable.parameter' → #9CDCFE
+ *
+ * These are NOT TextMate scope names. TextMate scopes like 'entity.name.type'
+ * and 'constant.numeric' have no entry in Monaco's standalone theme trie and
+ * produce no colour. Use the short Monarch-native names above.
  */
 
 import { injectable, inject, LazyServiceIdentifier } from '@theia/core/shared/inversify';
@@ -54,18 +57,18 @@ const TS_JS_MONARCH: monaco.languages.IMonarchLanguage = {
             // Line comment
             [/\/\/.*$/, 'comment'],
             // Numbers
-            [/0[xX][0-9a-fA-F]+n?/, 'constant.numeric'],
-            [/0[oO][0-7]+n?/, 'constant.numeric'],
-            [/0[bB][01]+n?/, 'constant.numeric'],
-            [/\d+n/, 'constant.numeric'],
-            [/\d*\.\d+([eE][+-]?\d+)?/, 'constant.numeric'],
-            [/\d+([eE][+-]?\d+)?/, 'constant.numeric'],
+            [/0[xX][0-9a-fA-F]+n?/, 'number.hex'],
+            [/0[oO][0-7]+n?/, 'number'],
+            [/0[bB][01]+n?/, 'number'],
+            [/\d+n/, 'number'],
+            [/\d*\.\d+([eE][+-]?\d+)?/, 'number'],
+            [/\d+([eE][+-]?\d+)?/, 'number'],
             // Decorators
-            [/@[a-zA-Z_$][\w$]*/, 'tag'],
+            [/@[a-zA-Z_$][\w$]*/, 'annotation'],
             // Identifiers / keywords
             [/[a-zA-Z_$][\w$]*/, {
                 cases: {
-                    '@typeKeywords': 'entity.name.type',
+                    '@typeKeywords': 'type',
                     '@keywords': 'keyword',
                     '@default': '',
                 },
@@ -137,19 +140,19 @@ const PYTHON_MONARCH: monaco.languages.IMonarchLanguage = {
             // Comments
             [/#.*$/, 'comment'],
             // Numbers
-            [/0[xX][0-9a-fA-F]+/, 'constant.numeric'],
-            [/0[oO][0-7]+/, 'constant.numeric'],
-            [/0[bB][01]+/, 'constant.numeric'],
-            [/\d*\.\d+([eE][+-]?\d+)?[jJ]?/, 'constant.numeric'],
-            [/\d+[jJ]/, 'constant.numeric'],
-            [/\d+/, 'constant.numeric'],
+            [/0[xX][0-9a-fA-F]+/, 'number.hex'],
+            [/0[oO][0-7]+/, 'number'],
+            [/0[bB][01]+/, 'number'],
+            [/\d*\.\d+([eE][+-]?\d+)?[jJ]?/, 'number'],
+            [/\d+[jJ]/, 'number'],
+            [/\d+/, 'number'],
             // Decorator
-            [/@[a-zA-Z_]\w*/, 'tag'],
+            [/@[a-zA-Z_]\w*/, 'annotation'],
             // Identifiers
             [/[a-zA-Z_]\w*/, {
                 cases: {
                     '@keywords': 'keyword',
-                    '@builtins': 'entity.name.type',
+                    '@builtins': 'type',
                     '@default': '',
                 },
             }],
@@ -195,16 +198,16 @@ const GO_MONARCH: monaco.languages.IMonarchLanguage = {
             // Line comment
             [/\/\/.*$/, 'comment'],
             // Numbers
-            [/0[xX][0-9a-fA-F_]+/, 'constant.numeric'],
-            [/0[oO][0-7_]+/, 'constant.numeric'],
-            [/0[bB][01_]+/, 'constant.numeric'],
-            [/\d[\d_]*\.[\d_]*([eE][+-]?[\d_]+)?/, 'constant.numeric'],
-            [/\d[\d_]*/, 'constant.numeric'],
+            [/0[xX][0-9a-fA-F_]+/, 'number.hex'],
+            [/0[oO][0-7_]+/, 'number'],
+            [/0[bB][01_]+/, 'number'],
+            [/\d[\d_]*\.[\d_]*([eE][+-]?[\d_]+)?/, 'number'],
+            [/\d[\d_]*/, 'number'],
             // Identifiers
             [/[a-zA-Z_]\w*/, {
                 cases: {
                     '@keywords': 'keyword',
-                    '@builtins': 'entity.name.type',
+                    '@builtins': 'type',
                     '@default': '',
                 },
             }],
@@ -245,20 +248,20 @@ const RUST_MONARCH: monaco.languages.IMonarchLanguage = {
             // Line comment
             [/\/\/.*$/, 'comment'],
             // Numbers with suffix
-            [/0[xX][0-9a-fA-F_]+(_?[iu]\d+)?/, 'constant.numeric'],
-            [/0[oO][0-7_]+(_?[iu]\d+)?/, 'constant.numeric'],
-            [/0[bB][01_]+(_?[iu]\d+)?/, 'constant.numeric'],
-            [/\d[\d_]*\.[\d_]*([eE][+-]?[\d_]+)?(_?f\d+)?/, 'constant.numeric'],
-            [/\d[\d_]*(_?[iu]\d+)?/, 'constant.numeric'],
+            [/0[xX][0-9a-fA-F_]+(_?[iu]\d+)?/, 'number.hex'],
+            [/0[oO][0-7_]+(_?[iu]\d+)?/, 'number'],
+            [/0[bB][01_]+(_?[iu]\d+)?/, 'number'],
+            [/\d[\d_]*\.[\d_]*([eE][+-]?[\d_]+)?(_?f\d+)?/, 'number'],
+            [/\d[\d_]*(_?[iu]\d+)?/, 'number'],
             // Macro invocation (name!)
-            [/[a-zA-Z_]\w*!/, 'entity.name.function'],
+            [/[a-zA-Z_]\w*!/, 'tag'],
             // Lifetime
-            [/'[a-zA-Z_]\w*/, 'entity.name.type'],
+            [/'[a-zA-Z_]\w*/, 'type'],
             // Identifiers
             [/[a-zA-Z_]\w*/, {
                 cases: {
                     '@keywords': 'keyword',
-                    '@primitives': 'entity.name.type',
+                    '@primitives': 'type',
                     '@default': '',
                 },
             }],
