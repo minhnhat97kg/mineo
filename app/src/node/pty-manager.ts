@@ -60,7 +60,7 @@ export class PtyManager {
 
     /**
      * Spawn a new PTY instance.
-     * - role='editor': spawns nvim with --listen socket
+     * - role='neovim': spawns nvim with --listen socket
      * - role='terminal': spawns $SHELL (bash/zsh)
      */
     spawn(id: PtyInstanceId, role: PaneRole, cols: number, rows: number, cwd?: string): void {
