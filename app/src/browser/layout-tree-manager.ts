@@ -582,11 +582,11 @@ export class LayoutTreeManager {
         return null;
     }
 
-    /** Get the first editor leaf (for "primary" designation). */
+    /** Get the first neovim leaf (for "primary" designation). */
     getFirstEditorLeaf(): LeafNode | undefined {
         for (const tab of this._layout.tabs) {
             for (const leaf of walkLeaves(tab.root)) {
-                if (leaf.role === 'editor') return leaf;
+                if (leaf.role === 'neovim') return leaf;
             }
         }
         return undefined;
