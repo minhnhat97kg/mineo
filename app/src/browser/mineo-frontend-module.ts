@@ -22,7 +22,7 @@ import { ServiceConnectionProvider, RemoteConnectionProvider } from '@theia/core
 import { FileNavigatorContribution } from '@theia/navigator/lib/browser/navigator-contribution';
 import { NvimWidget } from './neovim-widget';
 import { ModeService, ModeActivator, EditorMode } from './mode-service';
-import { TreesitterManager } from './treesitter-manager';
+import { MonarchTokenizer } from './monarch-tokenizer';
 
 // Increase disconnected buffer size to 50MB (default is 100KB)
 // to prevent "Max disconnected buffer size exceeded" errors when backgrounded
@@ -397,9 +397,9 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   // Menu bar collapse/expand toggle
   bind(FrontendApplicationContribution).to(MenuBarToggleContribution).inSingletonScope();
 
-  // Treesitter syntax highlighting — WASM-backed tokenizer for Monaco mode
-  bind(TreesitterManager).toSelf().inSingletonScope();
-  bind(FrontendApplicationContribution).to(TreesitterManager).inSingletonScope();
+  // Monarch syntax highlighting — native Monaco line-by-line tokenizer
+  bind(MonarchTokenizer).toSelf().inSingletonScope();
+  bind(FrontendApplicationContribution).to(MonarchTokenizer).inSingletonScope();
 
   // Suppress breadcrumbs
   try {

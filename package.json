@@ -2,12 +2,15 @@
   "name": "mineo",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["app"],
+  "workspaces": [
+    "app"
+  ],
   "scripts": {
     "build": "cd app && npx theia build",
     "start": "node scripts/start.js",
     "test": "playwright test",
-    "download-plugins": "bash scripts/download-plugins.sh"
+    "download-plugins": "bash scripts/download-plugins.sh",
+    "postinstall": "node scripts/apply-patches.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",
@@ -22,6 +25,7 @@
     "cookie": "^0.6.0",
     "express": "^4.19.0",
     "express-session": "^1.18.0",
-    "memorystore": "^1.6.7"
+    "memorystore": "^1.6.7",
+    "web-tree-sitter": "^0.25.0"
   }
 }
