@@ -10,10 +10,11 @@
  */
 
 import { ApplicationShell } from '@theia/core/lib/browser/shell/application-shell';
-import { Widget, BaseWidget, Message } from '@theia/core/lib/browser/widgets/widget';
+import { BaseWidget } from '@theia/core/lib/browser/widgets/widget';
+import { Widget, BoxPanel, BoxLayout, SplitPanel, SplitLayout } from '@lumino/widgets';
+import { Message, MessageLoop } from '@lumino/messaging';
+import { Disposable } from '@theia/core/lib/common/disposable';
 import { Emitter, Event } from '@theia/core/lib/common/event';
-import { SplitPanel, SplitLayout, BoxLayout } from '@lumino/widgets';
-import { MessageLoop } from '@lumino/messaging';
 import { interfaces } from '@theia/core/shared/inversify';
 import { NvimWidget } from './neovim-widget';
 import { PtyControlService } from './pty-control-service';
@@ -44,12 +45,12 @@ function getDropZone(e: DragEvent, el: HTMLElement): DropZone {
 // ── PaneWrapper ───────────────────────────────────────────────────────────────
 
 /**
- * PaneWrapper — a BaseWidget that hosts an inner pane widget with a header bar.
- * Layout: flex column — 24px header + flex:1 content area.
+ * PaneWrapper — a Panel that hosts an inner pane widget with a header bar.
+ * Inheriting from Panel ensures Lumino correctly propagates layout messages (Resize, Attach).
  */
 class PaneWrapper extends BaseWidget {
     private readonly headerEl: HTMLElement;
-    private readonly contentEl: HTMLElement;
+    private readonly contentPanel: BoxPanel;
     private innerWidget: Widget | undefined;
 
     constructor(
@@ -63,15 +64,25 @@ class PaneWrapper extends BaseWidget {
         super();
         this.id = 'mineo.pane-wrapper.' + leafId;
         this.addClass('mineo-pane-wrapper');
-        this.node.style.cssText = 'display:flex;flex-direction:column;width:100%;height:100%;overflow:hidden;position:relative;';
+        
+        // Use BoxLayout for the PaneWrapper (Header + Content)
+        const mainLayout = new BoxLayout({ direction: 'top-to-bottom', spacing: 0 });
+        this.layout = mainLayout;
 
-        this.headerEl = document.createElement('div');
-        this.headerEl.className = 'mineo-pane-header';
-        this.node.appendChild(this.headerEl);
+        // Header Widget
+        const header = new Widget();
+        header.addClass('mineo-pane-header');
+        this.headerEl = header.node;
+        mainLayout.addWidget(header);
+        // Explicitly set the height basis for the header so Lumino doesn't collapse it
+        BoxLayout.setSizeBasis(header, 20);
+        BoxLayout.setStretch(header, 0);
 
-        this.contentEl = document.createElement('div');
-        this.contentEl.className = 'mineo-pane-content';
-        this.node.appendChild(this.contentEl);
+        // Content Panel (where the editor goes)
+        this.contentPanel = new BoxPanel({ direction: 'top-to-bottom', spacing: 0 });
+        this.contentPanel.addClass('mineo-pane-content');
+        mainLayout.addWidget(this.contentPanel);
+        BoxLayout.setStretch(this.contentPanel, 1);
 
         this.buildHeader();
 
@@ -139,6 +150,23 @@ class PaneWrapper extends BaseWidget {
         actions.appendChild(close);
     }
 
+
+    protected override onActivateRequest(msg: Message): void {
+        super.onActivateRequest(msg);
+        if (this.innerWidget) {
+            this.innerWidget.activate();
+        }
+    }
+
+    protected override onResize(msg: Widget.ResizeMessage): void {
+        super.onResize(msg);
+        if (this.innerWidget instanceof NvimWidget) {
+            requestAnimationFrame(() => {
+                if (this.innerWidget instanceof NvimWidget) this.innerWidget.fitAndResize();
+            });
+        }
+    }
+
     showPanePicker(anchor: HTMLElement, direction: 'horizontal' | 'vertical'): void {
         document.querySelector('.mineo-pane-picker')?.remove();
 
@@ -179,8 +207,30 @@ class PaneWrapper extends BaseWidget {
     }
 
     setInnerWidget(widget: Widget): void {
+        if (this.innerWidget === widget) {
+            widget.activate();
+            return;
+        }
+
+        // If another widget was there, clear it.
+        // We don't dispose as it might be cached in EditorManager/widgetPool.
+        if (this.innerWidget) {
+            this.contentPanel.layout!.removeWidget(this.innerWidget);
+        }
+
         this.innerWidget = widget;
-        this.contentEl.appendChild(widget.node);
+        this.contentPanel.addWidget(widget);
+        BoxLayout.setStretch(widget, 1);
+        
+        // Ensure the editor knows its new size immediately
+        requestAnimationFrame(() => {
+            if (this.innerWidget === widget) {
+                MessageLoop.sendMessage(widget, Widget.ResizeMessage.UnknownSize);
+                widget.update();
+            }
+        });
+
+        widget.activate();
     }
 
     getInnerWidget(): Widget | undefined {
@@ -189,24 +239,6 @@ class PaneWrapper extends BaseWidget {
 
     get leafData(): { id: string; instanceId: string; role: string } {
         return { id: this.leaf.id, instanceId: this.leaf.instanceId, role: this.leaf.role };
-    }
-
-    protected override onResize(msg: Widget.ResizeMessage): void {
-        super.onResize(msg);
-        if (this.innerWidget instanceof NvimWidget) {
-            requestAnimationFrame(() => {
-                if (this.innerWidget instanceof NvimWidget) this.innerWidget.fitAndResize();
-            });
-        }
-    }
-
-    protected override onAfterShow(msg: Message): void {
-        super.onAfterShow(msg);
-        if (this.innerWidget instanceof NvimWidget) {
-            requestAnimationFrame(() => {
-                if (this.innerWidget instanceof NvimWidget) this.innerWidget.fitAndResize();
-            });
-        }
     }
 }
 
@@ -244,6 +276,16 @@ export class TilingContainer extends BaseWidget {
 
         const boxLayout = new BoxLayout();
         (this as any).layout = boxLayout;
+
+        // Rebuild when the layout model changes for this tab
+        this.toDispose.push(
+            this.layoutTreeManager.onLayoutChange(() => {
+                const freshTab = this.layoutTreeManager.layout.tabs.find(t => t.id === this.tabLayout.id);
+                if (!freshTab) return; // tab was removed — TilingLayoutService handles shell cleanup
+                this.tabLayout = freshTab;
+                this.rebuildLayout();
+            })
+        );
     }
 
     /** Build the initial layout tree. Call after widget is attached. */
@@ -499,7 +541,11 @@ export class TilingContainer extends BaseWidget {
         requestAnimationFrame(() => {
             for (const [, wrapper] of this.wrapperMap) {
                 const inner = wrapper.getInnerWidget();
-                if (inner instanceof NvimWidget) inner.fitAndResize();
+                if (inner instanceof NvimWidget) {
+                    inner.fitAndResize();
+                } else if (inner) {
+                    MessageLoop.sendMessage(inner, Widget.ResizeMessage.UnknownSize);
+                }
             }
         });
     }
@@ -516,7 +562,11 @@ export class TilingContainer extends BaseWidget {
         requestAnimationFrame(() => {
             for (const [, wrapper] of this.wrapperMap) {
                 const inner = wrapper.getInnerWidget();
-                if (inner instanceof NvimWidget) inner.fitAndResize();
+                if (inner instanceof NvimWidget) {
+                    inner.fitAndResize();
+                } else if (inner) {
+                    MessageLoop.sendMessage(inner, Widget.ResizeMessage.UnknownSize);
+                }
             }
         });
     }

@@ -224,14 +224,7 @@ export class TilingLayoutService {
         const newLeaf = this.layoutTreeManager.splitPane(tabId, leafId, direction, role);
         if (!newLeaf) return;
 
-        const tab = this.layoutTreeManager.layout.tabs.find(t => t.id === tabId);
-        if (!tab) return;
-
-        const splitNode = this.findSplitContaining(tab.root, newLeaf.id);
-        if (!splitNode) return;
-
-        await container.handleSplit(leafId, newLeaf, splitNode.id, direction, splitNode.sizes);
-
+        // rebuildLayout is triggered by onLayoutChange subscription in TilingContainer.
         requestAnimationFrame(() => {
             container.focusLeaf(newLeaf.id);
         });
@@ -278,11 +271,11 @@ export class TilingLayoutService {
                 }
             }
         } else {
-            await container.handleClose(leafId);
-            const leaves = this.layoutTreeManager.getTabLeaves(tabId);
-            if (leaves.length > 0) {
-                container.focusLeaf(leaves[0].id);
-            }
+            // rebuildLayout triggered by onLayoutChange; focus first remaining leaf after settle
+            requestAnimationFrame(() => {
+                const leaves = this.layoutTreeManager.getTabLeaves(tabId);
+                if (leaves.length > 0) container.focusLeaf(leaves[0].id);
+            });
         }
     }
 
@@ -324,15 +317,6 @@ export class TilingLayoutService {
 
         const newLeaf = this.layoutTreeManager.splitPane(tabId, leafId, 'horizontal', 'neovim');
         if (!newLeaf) return;
-
-        const tab = this.layoutTreeManager.layout.tabs.find(t => t.id === tabId);
-        if (!tab) return;
-
-        const splitNode = this.findSplitContaining(tab.root, newLeaf.id);
-        if (!splitNode) return;
-
-        await container.handleSplit(leafId, newLeaf, splitNode.id, splitNode.direction, splitNode.sizes);
-
         requestAnimationFrame(() => {
             container.focusLeaf(newLeaf.id);
         });
@@ -371,14 +355,6 @@ export class TilingLayoutService {
 
         const newLeaf = this.layoutTreeManager.splitPane(tabId, leafId, direction, role as any);
         if (!newLeaf) return;
-
-        const tab = this.layoutTreeManager.layout.tabs.find(t => t.id === tabId);
-        if (!tab) return;
-
-        const splitNode = this.findSplitContaining(tab.root, newLeaf.id);
-        if (!splitNode) return;
-
-        await container.handleSplit(leafId, newLeaf, splitNode.id, direction, splitNode.sizes);
         requestAnimationFrame(() => container.focusLeaf(newLeaf.id));
     }
 
