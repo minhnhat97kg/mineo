@@ -7,7 +7,11 @@
   ],
   "scripts": {
     "build": "cd app && npx theia build",
+    "build:server": "cd server && npm run build",
+    "build:client": "cd client && npm run build",
+    "build:all": "npm run build:server && npm run build:client",
     "start": "node scripts/start.js",
+    "start:new": "node scripts/start-new.js",
     "test": "playwright test",
     "download-plugins": "bash scripts/download-plugins.sh",
     "postinstall": "node scripts/apply-patches.js"
