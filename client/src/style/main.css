@@ -32,6 +32,7 @@ html, body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: 13px;
     color: #e5e7eb;
+    overscroll-behavior: none;
 }
 
 #mineo-root {
@@ -46,7 +47,6 @@ html, body {
 
 /* ── xterm ── */
 .xterm { height: 100%; padding: 4px; }
-.xterm-viewport { overflow-y: hidden !important; }
 
 /* ══════════════════════════════════════════════════════════════════════════
    flexlayout-react — SmartPane visual style
@@ -241,19 +241,12 @@ html, body {
 /* ── Splitter ── */
 .flexlayout__splitter {
     background: #121212;
-    width: 4px;
-    height: 4px;
 }
 .flexlayout__splitter:hover,
 .flexlayout__splitter_drag {
     background: #60a5fa;
     border-radius: 4px;
 }
-/* Expand the invisible hit area to 20px on both axes for easy touch targeting */
-/* .flexlayout__splitter_extra { */
-/*     width: 20px; */
-/*     height: 20px; */
-/* } */
 
 /* ── Maximized tabset: no margin so it fills the space ── */
 .flexlayout__tabset-maximized {

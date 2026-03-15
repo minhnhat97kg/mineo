@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { Unicode11Addon } from 'xterm-addon-unicode11';
@@ -6,16 +7,36 @@ import { ptyControlService, PaneRole } from '../pty-control-service';
 import { settingsStore } from '../settings-store';
 import { getTheme, toXtermTheme } from '../themes';
 import { cwd } from '../layout-utils';
+import { TermContextMenu, useTermContextMenu } from './TermContextMenu';
 
 export interface PtyPaneProps {
     instanceId: string;
     role: PaneRole;
     termMapRef: React.RefObject<Map<string, { term: Terminal; fitAddon: FitAddon }>>;
     lastFocusedNvimRef: React.RefObject<string | null>;
+    keyboardLocked: boolean;
 }
 
-export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef }: PtyPaneProps) {
-    const elRef = useRef<HTMLDivElement>(null);
+export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef, keyboardLocked }: PtyPaneProps) {
+    const elRef   = useRef<HTMLDivElement>(null);
+    const termRef = useRef<Terminal | null>(null);
+    const dwsRef  = useRef<WebSocket | null>(null);
+
+    // Apply keyboardLocked to xterm's hidden textarea — readOnly prevents
+    // the virtual keyboard from appearing on focus on iOS/iPadOS
+    useEffect(() => {
+        const textarea = elRef.current?.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
+        if (textarea) textarea.readOnly = keyboardLocked;
+    }, [keyboardLocked]);
+
+    const sendData = useCallback((data: string) => {
+        const dws = dwsRef.current;
+        if (dws?.readyState === WebSocket.OPEN) {
+            dws.send(new TextEncoder().encode(data));
+        }
+    }, []);
+
+    const { menu, close } = useTermContextMenu({ role, elRef, termRef, sendData });
 
     useEffect(() => {
         const el = elRef.current;
@@ -37,6 +58,10 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef }: Pt
         term.loadAddon(fitAddon);
         term.unicode.activeVersion = '11';
         term.open(el);
+        termRef.current = term;
+        // Apply initial keyboard lock state to the textarea xterm just created
+        const textarea = el.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
+        if (textarea) textarea.readOnly = keyboardLocked;
         // Re-apply theme immediately after open() to avoid xterm's green default foreground flash
         term.options.theme = toXtermTheme(currentTheme);
 
@@ -95,6 +120,7 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef }: Pt
 
             const dws = new WebSocket(`${base}/data`);
             dataWs = dws;
+            dwsRef.current = dws;
             dws.binaryType = 'arraybuffer';
             let revealed = false;
             dws.addEventListener('message', e => {
@@ -102,7 +128,9 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef }: Pt
                 if (!revealed) { revealed = true; el.style.opacity = '1'; }
             });
             dws.addEventListener('close', () => {
+                dwsRef.current = null;
                 term.write('\r\n\x1b[31m[disconnected]\x1b[0m\r\n');
+                if (!disposed) window.dispatchEvent(new CustomEvent('mineo:disconnected'));
             });
             dws.addEventListener('error', () => {
                 term.write('\r\n\x1b[31m[connection error]\x1b[0m\r\n');
@@ -132,6 +160,7 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef }: Pt
             dataWs?.close();
             resizeWs?.close();
             term.dispose();
+            termRef.current = null;
             termMapRef.current.delete(instanceId);
             unsubSettings();
             ptyControlService.kill(instanceId);
@@ -142,5 +171,10 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef }: Pt
     // neovim: start invisible so the green startup flash is never shown;
     // revealed on first data (see revealOnFirstData below)
     const initialOpacity = role === 'neovim' ? 0 : 1;
-    return <div ref={elRef} style={{ width: '100%', height: '100%', opacity: initialOpacity, transition: 'opacity 0.15s' }} />;
+    return (
+        <>
+            <div ref={elRef} style={{ width: '100%', height: '100%', opacity: initialOpacity, transition: 'opacity 0.15s' }} />
+            {createPortal(<TermContextMenu state={menu} onClose={close} />, document.body)}
+        </>
+    );
 }

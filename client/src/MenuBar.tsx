@@ -15,6 +15,8 @@ interface MenuDef {
 
 interface Props {
     onAddPane: (role: PaneType) => void;
+    keyboardLocked: boolean;
+    onToggleKeyboard: () => void;
 }
 
 // ── Input Modal ──
@@ -193,7 +195,7 @@ type ModalState =
     | { kind: 'openWorkspace' }
     | null;
 
-export function MenuBar({ onAddPane }: Props) {
+export function MenuBar({ onAddPane, keyboardLocked, onToggleKeyboard }: Props) {
     const [openMenu, setOpenMenu] = useState<string | null>(null);
     const [modal, setModal] = useState<ModalState>(null);
 
@@ -259,6 +261,17 @@ export function MenuBar({ onAddPane }: Props) {
                 { label: 'Explorer', action: () => onAddPane('explorer') },
                 { label: 'Terminal', action: () => onAddPane('terminal') },
                 { label: 'Neovim', action: () => onAddPane('neovim') },
+                { separator: true, label: '' },
+                {
+                    label: document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen',
+                    action: () => {
+                        if (document.fullscreenElement) {
+                            document.exitFullscreen().catch(() => {});
+                        } else {
+                            document.documentElement.requestFullscreen().catch(() => {});
+                        }
+                    },
+                },
             ],
         },
     ];
@@ -284,6 +297,14 @@ export function MenuBar({ onAddPane }: Props) {
                         )}
                     </div>
                 ))}
+                <div className="mb-spacer" />
+                <button
+                    className={`mb-kbd-toggle ${keyboardLocked ? 'mb-kbd-locked' : 'mb-kbd-unlocked'}`}
+                    onClick={onToggleKeyboard}
+                    title={keyboardLocked ? 'Keyboard locked — tap to enable' : 'Keyboard enabled — tap to lock'}
+                >
+                    ⌨
+                </button>
             </div>
 
             {modal?.kind === 'newFile' && (

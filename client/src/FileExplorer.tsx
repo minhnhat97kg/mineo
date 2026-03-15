@@ -167,8 +167,12 @@ function ContextMenu({
                 <>
                     <div className="fe-context-item" onClick={() => onAction('newFile')}>New File</div>
                     <div className="fe-context-item" onClick={() => onAction('newFolder')}>New Folder</div>
+                    <div className="fe-context-item" onClick={() => onAction('upload')}>Upload Files…</div>
                     <div className="fe-context-sep" />
                 </>
+            )}
+            {!node.isDirectory && (
+                <div className="fe-context-item" onClick={() => onAction('download')}>Download</div>
             )}
             <div className="fe-context-item" onClick={() => onAction('rename')}>Rename</div>
             <div className="fe-context-item fe-context-item-danger" onClick={() => onAction('delete')}>Delete</div>
@@ -287,7 +291,9 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
     const [error, setError] = useState<string | null>(null);
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
     const [inlineInput, setInlineInput] = useState<InlineInputState | null>(null);
+    const [uploading, setUploading] = useState(false);
     const rootDirRef = useRef<string | undefined>(rootDir);
+    const uploadInputRef = useRef<HTMLInputElement>(null);
 
     // Load root directory
     const loadRoot = useCallback(() => {
@@ -400,6 +406,15 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
                 isDirectory: action === 'newFolder',
                 defaultValue: '',
             });
+        } else if (action === 'upload') {
+            // Store the target dir and trigger the hidden file input
+            uploadTargetDirRef.current = node.path;
+            uploadInputRef.current?.click();
+        } else if (action === 'download') {
+            const a = document.createElement('a');
+            a.href = `/api/files/download?path=${encodeURIComponent(node.path)}`;
+            a.download = node.name;
+            a.click();
         } else if (action === 'rename') {
             setInlineInput({
                 parentDir: node.path.substring(0, node.path.lastIndexOf('/')),
@@ -442,6 +457,25 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
         setInlineInput(null);
     }, []);
 
+    // Upload support
+    const uploadTargetDirRef = useRef<string>(rootDirRef.current ?? '');
+
+    const handleUploadFiles = useCallback((files: FileList | null) => {
+        if (!files || files.length === 0) return;
+        const dir = uploadTargetDirRef.current || rootDirRef.current || '';
+        setUploading(true);
+        const form = new FormData();
+        for (let i = 0; i < files.length; i++) form.append('files', files[i]);
+        fetch(`/api/files/upload?dir=${encodeURIComponent(dir)}`, { method: 'POST', body: form })
+            .then(r => r.json())
+            .then(() => refreshDir(dir))
+            .catch(err => alert(`Upload failed: ${err.message}`))
+            .finally(() => {
+                setUploading(false);
+                if (uploadInputRef.current) uploadInputRef.current.value = '';
+            });
+    }, [refreshDir]);
+
     // Right-click on empty area = new file/folder at root
     const handleRootContextMenu = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -466,27 +500,52 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
 
     return (
         <div className="fe-root" onContextMenu={handleRootContextMenu}>
-            {showRootInput && (
-                <InlineInput
-                    defaultValue=""
-                    depth={0}
-                    onSubmit={handleInlineSubmit}
-                    onCancel={handleInlineCancel}
-                />
-            )}
-            {nodes.map(node => (
-                <TreeEntry
-                    key={node.path}
-                    node={node}
-                    depth={0}
-                    onToggle={toggleNode}
-                    onOpenFile={onOpenFile}
-                    onContextMenu={handleContextMenu}
-                    inlineInput={inlineInput}
-                    onInlineSubmit={handleInlineSubmit}
-                    onInlineCancel={handleInlineCancel}
-                />
-            ))}
+            {/* ── Toolbar ── */}
+            <div className="fe-toolbar">
+                <button
+                    className="fe-toolbar-btn"
+                    title="Upload files to workspace root"
+                    disabled={uploading}
+                    onClick={() => {
+                        uploadTargetDirRef.current = rootDirRef.current ?? '';
+                        uploadInputRef.current?.click();
+                    }}
+                >
+                    {uploading ? '⏳' : '⬆'} Upload
+                </button>
+            </div>
+            {/* Hidden file input for uploads */}
+            <input
+                ref={uploadInputRef}
+                type="file"
+                multiple
+                style={{ display: 'none' }}
+                onChange={e => handleUploadFiles(e.target.files)}
+            />
+            {/* Scrollable tree area */}
+            <div className="fe-tree">
+                {showRootInput && (
+                    <InlineInput
+                        defaultValue=""
+                        depth={0}
+                        onSubmit={handleInlineSubmit}
+                        onCancel={handleInlineCancel}
+                    />
+                )}
+                {nodes.map(node => (
+                    <TreeEntry
+                        key={node.path}
+                        node={node}
+                        depth={0}
+                        onToggle={toggleNode}
+                        onOpenFile={onOpenFile}
+                        onContextMenu={handleContextMenu}
+                        inlineInput={inlineInput}
+                        onInlineSubmit={handleInlineSubmit}
+                        onInlineCancel={handleInlineCancel}
+                    />
+                ))}
+            </div>
             {contextMenu && (
                 <ContextMenu
                     x={contextMenu.x}

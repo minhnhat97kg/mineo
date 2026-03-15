@@ -18,7 +18,8 @@ export interface LayoutContainerHandle {
 
 // ─── LayoutContainer ─────────────────────────────────────────────────────────
 
-export const LayoutContainer = forwardRef<LayoutContainerHandle>(function LayoutContainer(_, ref) {
+export const LayoutContainer = forwardRef<LayoutContainerHandle, { keyboardLocked: boolean }>(
+function LayoutContainer({ keyboardLocked }, ref) {
     const layoutRef = useRef<Layout>(null);
     const lastFocusedNvimRef = useRef<string | null>(null);
     const termMapRef = useRef<Map<string, { term: Terminal; fitAddon: FitAddon }>>(new Map());
@@ -65,6 +66,7 @@ export const LayoutContainer = forwardRef<LayoutContainerHandle>(function Layout
                     role={component}
                     termMapRef={termMapRef}
                     lastFocusedNvimRef={lastFocusedNvimRef}
+                    keyboardLocked={keyboardLocked}
                 />
             );
         }
@@ -75,7 +77,7 @@ export const LayoutContainer = forwardRef<LayoutContainerHandle>(function Layout
             return <SettingsPanel />;
         }
         return null;
-    }, [openFileInNvim]);
+    }, [openFileInNvim, keyboardLocked]);
 
     const onRenderTab = useCallback((node: TabNode, renderValues: { leading: React.ReactNode }) => {
         const component = node.getComponent() as ComponentType;

@@ -69,6 +69,40 @@
     flex: 1;
 }
 
+.mb-kbd-toggle {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    border: none;
+    background: transparent;
+    color: var(--ui-text-muted, #888);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 4px;
+    border-radius: 4px;
+}
+.mb-kbd-toggle:hover {
+    background: rgba(255,255,255,0.06);
+    color: var(--ui-text, #ccc);
+}
+.mb-kbd-unlocked {
+    color: var(--ui-text, #ccc);
+}
+.mb-kbd-locked::after {
+    content: '';
+    position: absolute;
+    top: 4px; left: 20px;
+    width: 2px; height: 20px;
+    background: #f87171;
+    border-radius: 1px;
+    transform: rotate(-45deg);
+    transform-origin: top center;
+    pointer-events: none;
+}
+
 /* ── Modal overlay ── */
 
 .mb-modal-overlay {

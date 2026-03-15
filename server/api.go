@@ -273,6 +273,93 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, co
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 	})
 
+	// ── GET /api/files/download?path= ────────────────────────────────
+	mux.HandleFunc("GET /api/files/download", func(w http.ResponseWriter, r *http.Request) {
+		cfg.mu.RLock()
+		workspace := cfg.Workspace
+		cfg.mu.RUnlock()
+
+		p := r.URL.Query().Get("path")
+		resolved := validateWorkspacePath(p, workspace, w)
+		if resolved == "" {
+			return
+		}
+		info, err := os.Stat(resolved)
+		if os.IsNotExist(err) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Not found"})
+			return
+		}
+		if info.IsDir() {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Cannot download a directory"})
+			return
+		}
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(resolved)))
+		w.Header().Set("Content-Type", "application/octet-stream")
+		http.ServeFile(w, r, resolved)
+	})
+
+	// ── POST /api/files/upload?dir= ───────────────────────────────────
+	mux.HandleFunc("POST /api/files/upload", func(w http.ResponseWriter, r *http.Request) {
+		cfg.mu.RLock()
+		workspace := cfg.Workspace
+		cfg.mu.RUnlock()
+
+		dir := r.URL.Query().Get("dir")
+		destDir := validateWorkspacePath(dir, workspace, w)
+		if destDir == "" {
+			return
+		}
+
+		// Limit upload size to 256 MB
+		if err := r.ParseMultipartForm(256 << 20); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Failed to parse upload"})
+			return
+		}
+
+		files := r.MultipartForm.File["files"]
+		if len(files) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "No files provided"})
+			return
+		}
+
+		type uploadResult struct {
+			Name  string `json:"name"`
+			Error string `json:"error,omitempty"`
+		}
+		results := make([]uploadResult, 0, len(files))
+
+		for _, fh := range files {
+			name := filepath.Base(fh.Filename)
+			if name == "" || strings.Contains(name, "..") || strings.ContainsRune(name, '/') {
+				results = append(results, uploadResult{Name: fh.Filename, Error: "Invalid filename"})
+				continue
+			}
+			dest := filepath.Join(destDir, name)
+			if !strings.HasPrefix(dest, workspace) {
+				results = append(results, uploadResult{Name: name, Error: "Path outside workspace"})
+				continue
+			}
+			src, err := fh.Open()
+			if err != nil {
+				results = append(results, uploadResult{Name: name, Error: err.Error()})
+				continue
+			}
+			data := make([]byte, fh.Size)
+			_, err = src.Read(data)
+			src.Close()
+			if err != nil && err.Error() != "EOF" {
+				results = append(results, uploadResult{Name: name, Error: err.Error()})
+				continue
+			}
+			if err := os.WriteFile(dest, data, 0644); err != nil {
+				results = append(results, uploadResult{Name: name, Error: err.Error()})
+				continue
+			}
+			results = append(results, uploadResult{Name: name})
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "results": results})
+	})
+
 	// ── GET /api/config ───────────────────────────────────────────────
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
 		cfg.mu.RLock()
@@ -402,7 +489,11 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, co
 
 			nvimBin := ptyMgr.GetNvimBin()
 			ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-			cmd := exec.CommandContext(ctx, nvimBin, "--server", sockPath, "--remote-silent", file)
+			// Use --remote-send with :e to open silently (--remote-silent can show
+			// "Press ENTER" prompts when nvim is busy or the file is already open)
+			fileDir := filepath.Dir(file)
+			cmd := exec.CommandContext(ctx, nvimBin, "--server", sockPath, "--remote-send",
+				fmt.Sprintf("<Esc>:e %s<CR>:cd %s<CR>", file, fileDir))
 			err := cmd.Run()
 			cancel()
 
@@ -413,13 +504,6 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, co
 				}
 				continue
 			}
-
-			// Change nvim's cwd to the opened file's directory (best-effort)
-			fileDir := filepath.Dir(file)
-			ctx2, cancel2 := context.WithTimeout(r.Context(), 1*time.Second)
-			exec.CommandContext(ctx2, nvimBin, "--server", sockPath, "--remote-send",
-				fmt.Sprintf(":cd %s\r", fileDir)).Run()
-			cancel2()
 
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 			return
