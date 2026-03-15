@@ -326,17 +326,6 @@ export class TilingLayoutService {
         }
     }
 
-    private findSplitContaining(node: any, childId: string): any {
-        if (node.type === 'split') {
-            for (const child of node.children) {
-                if (child.id === childId) return node;
-                const found = this.findSplitContaining(child, childId);
-                if (found) return found;
-            }
-        }
-        return null;
-    }
-
     private getTabIdForContainer(container: TilingContainer): string | undefined {
         for (const [tabId, c] of this.containers) {
             if (c === container) return tabId;

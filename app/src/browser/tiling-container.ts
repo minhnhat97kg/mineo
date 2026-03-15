@@ -11,7 +11,7 @@
 
 import { ApplicationShell } from '@theia/core/lib/browser/shell/application-shell';
 import { BaseWidget } from '@theia/core/lib/browser/widgets/widget';
-import { Widget, BoxPanel, BoxLayout, SplitPanel, SplitLayout } from '@lumino/widgets';
+import { Widget, BoxPanel, BoxLayout, SplitPanel } from '@lumino/widgets';
 import { Message, MessageLoop } from '@lumino/messaging';
 import { Disposable } from '@theia/core/lib/common/disposable';
 import { Emitter, Event } from '@theia/core/lib/common/event';
@@ -406,109 +406,6 @@ export class TilingContainer extends BaseWidget {
     /** Get the wrapper widget for a leaf ID (used by TilingLayoutService context menu). */
     getWidget(leafId: string): Widget | undefined {
         return this.wrapperMap.get(leafId);
-    }
-
-    async handleSplit(
-        leafId: string,
-        newLeaf: LeafNode,
-        splitId: string,
-        direction: 'horizontal' | 'vertical',
-        sizes: number[],
-    ): Promise<void> {
-        const existingWrapper = this.wrapperMap.get(leafId);
-        if (!existingWrapper) return;
-
-        const newWrapper = await this.createLeafWrapper(newLeaf);
-
-        const splitPanel = new SplitPanel({
-            orientation: direction === 'horizontal' ? 'horizontal' : 'vertical',
-        });
-        splitPanel.id = 'mineo.split.' + splitId;
-        splitPanel.addClass('mineo-split-panel');
-        this.splitMap.set(splitId, splitPanel);
-
-        const parentWidget = existingWrapper.parent;
-        if (parentWidget instanceof SplitPanel) {
-            const parentLayout = parentWidget.layout as SplitLayout;
-            let widgetIndex = -1;
-            for (let i = 0; i < parentLayout.widgets.length; i++) {
-                if (parentLayout.widgets[i] === existingWrapper) { widgetIndex = i; break; }
-            }
-            if (widgetIndex >= 0) {
-                splitPanel.addWidget(existingWrapper);
-                splitPanel.addWidget(newWrapper);
-                parentLayout.insertWidget(widgetIndex, splitPanel);
-            }
-        } else if (parentWidget) {
-            const boxLayout = parentWidget.layout;
-            if (boxLayout instanceof BoxLayout) {
-                splitPanel.addWidget(existingWrapper);
-                splitPanel.addWidget(newWrapper);
-                boxLayout.addWidget(splitPanel);
-                this.rootWidget = splitPanel;
-            }
-        }
-
-        requestAnimationFrame(() => {
-            splitPanel.setRelativeSizes(sizes);
-            MessageLoop.sendMessage(existingWrapper, Widget.ResizeMessage.UnknownSize);
-            MessageLoop.sendMessage(newWrapper, Widget.ResizeMessage.UnknownSize);
-        });
-    }
-
-    async handleClose(leafId: string): Promise<void> {
-        const wrapper = this.wrapperMap.get(leafId);
-        if (!wrapper) return;
-
-        const inner = wrapper.getInnerWidget();
-        const found = this.layoutTreeManager.findLeaf(leafId);
-
-        if (inner && found) {
-            TilingContainer.widgetPool.delete(found.leaf.instanceId);
-            const descriptor = this.paneRegistry.get(found.leaf.role);
-            descriptor?.destroy?.(inner, found.leaf.instanceId);
-            // Kill PTY for PTY-backed panes
-            if (found.leaf.role === 'neovim' || found.leaf.role === 'terminal') {
-                this.ptyControlService.kill(found.leaf.instanceId).catch(() => {});
-            }
-        }
-        this.wrapperMap.delete(leafId);
-
-        const parentSplit = wrapper.parent;
-        if (parentSplit instanceof SplitPanel) {
-            wrapper.dispose();
-            const splitLayout = parentSplit.layout as SplitLayout;
-            if (splitLayout.widgets.length === 1) {
-                const survivor = splitLayout.widgets[0];
-                const grandParent = parentSplit.parent;
-                if (grandParent instanceof SplitPanel) {
-                    const gpLayout = grandParent.layout as SplitLayout;
-                    let splitIndex = -1;
-                    for (let i = 0; i < gpLayout.widgets.length; i++) {
-                        if (gpLayout.widgets[i] === parentSplit) { splitIndex = i; break; }
-                    }
-                    if (splitIndex >= 0) gpLayout.insertWidget(splitIndex, survivor);
-                    parentSplit.dispose();
-                } else if (grandParent) {
-                    const gpBoxLayout = grandParent.layout;
-                    if (gpBoxLayout instanceof BoxLayout) {
-                        gpBoxLayout.addWidget(survivor);
-                        parentSplit.dispose();
-                        this.rootWidget = survivor;
-                    }
-                }
-                for (const [id, sp] of this.splitMap) {
-                    if (sp === parentSplit) { this.splitMap.delete(id); break; }
-                }
-            }
-            requestAnimationFrame(() => {
-                for (const [, w] of this.wrapperMap) {
-                    MessageLoop.sendMessage(w, Widget.ResizeMessage.UnknownSize);
-                }
-            });
-        } else {
-            wrapper.dispose();
-        }
     }
 
     syncSizesToLayout(): void {
