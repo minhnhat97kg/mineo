@@ -5,10 +5,10 @@ import { LayoutManager } from './layout-manager';
 
 document.addEventListener('DOMContentLoaded', () => {
     const root = document.getElementById('mineo-root')!;
-    const manager = new LayoutManager(root);
-
-    const toolbar = document.createElement('div');
+    const toolbar = document.getElementById('mineo-toolbar')!;
     toolbar.className = 'mineo-toolbar';
+
+    const manager = new LayoutManager(root);
 
     const mkBtn = (label: string, action: () => void) => {
         const b = document.createElement('button');
@@ -20,6 +20,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     mkBtn('+ Neovim', () => manager.addPane('neovim'));
     mkBtn('+ Terminal', () => manager.addPane('terminal'));
-
-    document.body.appendChild(toolbar);
 });
