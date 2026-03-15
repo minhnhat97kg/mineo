@@ -8,7 +8,7 @@ interface Props {
     role: PaneRole;
 }
 
-export function XtermPane({ instanceId }: Props) {
+export function XtermPane({ instanceId, role: _role }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -49,6 +49,12 @@ export function XtermPane({ instanceId }: Props) {
         dws.addEventListener('message', e => {
             term.write(e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : enc.encode(e.data));
         });
+        dws.addEventListener('close', () => {
+            term.write('\r\n\x1b[31m[disconnected]\x1b[0m\r\n');
+        });
+        dws.addEventListener('error', () => {
+            term.write('\r\n\x1b[31m[connection error]\x1b[0m\r\n');
+        });
         term.onData(d => { if (dws.readyState === WebSocket.OPEN) dws.send(enc.encode(d)); });
         term.onBinary(d => {
             const b = new Uint8Array(d.length);
@@ -57,7 +63,6 @@ export function XtermPane({ instanceId }: Props) {
         });
 
         const rws = new WebSocket(`${base}/resize`);
-        resizeWs = rws;
         rws.addEventListener('open', () => { resizeWs = rws; fitAndResize(); });
         rws.addEventListener('close', () => { resizeWs = null; });
 
