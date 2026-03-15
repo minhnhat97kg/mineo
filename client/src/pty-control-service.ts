@@ -13,8 +13,14 @@ export interface SpawnOptions {
 class PtyControlService {
     private ws: WebSocket | null = null;
     private queue: string[] = [];
+    private pending = new Map<string, () => void>();
+    private ready: Promise<void>;
+    private resolveReady!: () => void;
 
-    constructor() { this.connect(); }
+    constructor() {
+        this.ready = new Promise(r => { this.resolveReady = r; });
+        this.connect();
+    }
 
     private connect(): void {
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -22,8 +28,24 @@ class PtyControlService {
         this.ws.addEventListener('open', () => {
             for (const m of this.queue) this.ws!.send(m);
             this.queue = [];
+            this.resolveReady();
         });
-        this.ws.addEventListener('close', () => setTimeout(() => this.connect(), 2000));
+        this.ws.addEventListener('message', (e) => {
+            try {
+                const msg = JSON.parse(e.data);
+                if (msg.status === 'ok' && msg.instanceId) {
+                    const resolve = this.pending.get(msg.instanceId);
+                    if (resolve) {
+                        this.pending.delete(msg.instanceId);
+                        resolve();
+                    }
+                }
+            } catch { /* ignore */ }
+        });
+        this.ws.addEventListener('close', () => {
+            this.ready = new Promise(r => { this.resolveReady = r; });
+            setTimeout(() => this.connect(), 2000);
+        });
     }
 
     private send(msg: object): void {
@@ -32,7 +54,22 @@ class PtyControlService {
         else this.queue.push(s);
     }
 
-    spawn(opts: SpawnOptions): void { this.send({ type: 'spawn', ...opts }); }
+    /** Spawn a PTY and resolve when the server acknowledges it. */
+    async spawn(opts: SpawnOptions): Promise<void> {
+        await this.ready;
+        return new Promise<void>((resolve) => {
+            this.pending.set(opts.instanceId, resolve);
+            this.send({ type: 'spawn', ...opts });
+            // Timeout fallback — don't hang forever
+            setTimeout(() => {
+                if (this.pending.has(opts.instanceId)) {
+                    this.pending.delete(opts.instanceId);
+                    resolve();
+                }
+            }, 3000);
+        });
+    }
+
     kill(instanceId: string): void { this.send({ type: 'kill', instanceId }); }
 }
 

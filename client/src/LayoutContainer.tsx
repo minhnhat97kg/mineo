@@ -1,94 +1,117 @@
-import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
-import { createRoot } from 'react-dom/client';
-import { GoldenLayout, ComponentContainer, LayoutConfig } from 'golden-layout';
-import { XtermPane } from './XtermPane';
-import { ptyControlService, PaneRole } from './pty-control-service';
-
-const STORAGE_KEY = 'mineo.layout';
-
-function uuid(): string {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-        const r = Math.random() * 16 | 0;
-        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-    });
-}
-
-function cwd(): string | undefined {
-    const h = location.hash.replace(/^#/, '');
-    return h.startsWith('/') ? h : undefined;
-}
-
-function defaultLayout(): LayoutConfig {
-    return {
-        root: {
-            type: 'stack',
-            content: [{
-                type: 'component',
-                componentType: 'neovim',
-                componentState: { instanceId: uuid(), role: 'neovim' as PaneRole },
-                title: 'Neovim',
-            }],
-        },
-    };
-}
+import {
+    useEffect, useRef, useCallback, forwardRef, useImperativeHandle, useState,
+} from 'react';
+import { Layout, Model, TabNode } from 'flexlayout-react';
+import { Terminal } from 'xterm';
+import { FitAddon } from 'xterm-addon-fit';
+import { FileExplorer } from './FileExplorer';
+import { SettingsPanel } from './SettingsPanel';
+import { settingsStore } from './settings-store';
+import { getTheme, applyThemeCSS } from './themes';
+import { PtyPane } from './panes/PtyPane';
+import { ComponentType, PANE_ICONS, PANE_TITLES } from './panes/pane-types';
+import { uuid, defaultJson } from './layout-utils';
 
 export interface LayoutContainerHandle {
-    addPane(role: PaneRole): void;
+    addPane(role: ComponentType): void;
 }
 
-export const LayoutContainer = forwardRef<LayoutContainerHandle>(function LayoutContainer(_, ref) {
-    const divRef = useRef<HTMLDivElement>(null);
-    const glRef = useRef<GoldenLayout | null>(null);
+// ─── LayoutContainer ─────────────────────────────────────────────────────────
 
-    useImperativeHandle(ref, () => ({
-        addPane(role: PaneRole) {
-            glRef.current?.addComponent(role, { instanceId: uuid(), role }, role === 'terminal' ? 'Terminal' : 'Neovim');
-        },
-    }));
+export const LayoutContainer = forwardRef<LayoutContainerHandle>(function LayoutContainer(_, ref) {
+    const layoutRef = useRef<Layout>(null);
+    const lastFocusedNvimRef = useRef<string | null>(null);
+    const termMapRef = useRef<Map<string, { term: Terminal; fitAddon: FitAddon }>>(new Map());
+
+    const [model] = useState<Model>(() => Model.fromJson(defaultJson()));
 
     useEffect(() => {
-        const container = divRef.current!;
-        const gl = new GoldenLayout(container);
-        glRef.current = gl;
-
-        const mount = (glc: ComponentContainer, state: unknown) => {
-            const { instanceId, role } = state as { instanceId: string; role: PaneRole };
-            ptyControlService.spawn({ instanceId, role, cols: 120, rows: 30, cwd: cwd() });
-
-            const root = createRoot(glc.element);
-            root.render(<XtermPane instanceId={instanceId} role={role} />);
-
-            glc.on('destroy', () => {
-                ptyControlService.kill(instanceId);
-                root.unmount();
-            });
-        };
-
-        gl.registerComponentFactoryFunction('neovim', mount);
-        gl.registerComponentFactoryFunction('terminal', mount);
-
-        const saved = (() => {
-            try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) as LayoutConfig : null; } catch { return null; }
-        })();
-
-        gl.init();
-        try { gl.loadLayout(saved ?? defaultLayout()); }
-        catch { gl.loadLayout(defaultLayout()); }
-
-        gl.on('stateChanged', () => {
-            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(gl.saveLayout())); } catch { /* ignore */ }
+        applyThemeCSS(getTheme(settingsStore.get().theme));
+        const unsub = settingsStore.subscribe(s => {
+            applyThemeCSS(getTheme(s.theme));
         });
-
-        const onResize = () => gl.updateSize(container.offsetWidth, container.offsetHeight);
-        window.addEventListener('resize', onResize);
-
-        return () => {
-            window.removeEventListener('resize', onResize);
-            gl.destroy();
-            glRef.current = null;
-        };
+        return unsub;
     }, []);
 
-    return <div ref={divRef} style={{ flex: 1, minHeight: 0 }} />;
+    const openFileInNvim = useCallback((filePath: string) => {
+        const instanceId = lastFocusedNvimRef.current;
+        const params = new URLSearchParams({ file: filePath });
+        if (instanceId) params.set('instanceId', instanceId);
+        fetch(`/api/nvim-open?${params}`).catch(() => {});
+    }, []);
+
+    const addPane = useCallback((role: ComponentType) => {
+        const id = uuid();
+        layoutRef.current?.addTabToActiveTabSet({
+            type: 'tab',
+            name: PANE_TITLES[role],
+            component: role,
+            config: (role === 'neovim' || role === 'terminal') ? { instanceId: id } : undefined,
+            id,
+        });
+    }, []);
+
+    useImperativeHandle(ref, () => ({ addPane }));
+
+    const factory = useCallback((node: TabNode) => {
+        const component = node.getComponent() as ComponentType;
+        const config = node.getConfig() as { instanceId?: string } | undefined;
+
+        if (component === 'neovim' || component === 'terminal') {
+            const instanceId = config?.instanceId ?? node.getId();
+            return (
+                <PtyPane
+                    instanceId={instanceId}
+                    role={component}
+                    termMapRef={termMapRef}
+                    lastFocusedNvimRef={lastFocusedNvimRef}
+                />
+            );
+        }
+        if (component === 'explorer') {
+            return <FileExplorer onOpenFile={openFileInNvim} />;
+        }
+        if (component === 'settings') {
+            return <SettingsPanel />;
+        }
+        return null;
+    }, [openFileInNvim]);
+
+    const onRenderTab = useCallback((node: TabNode, renderValues: { leading: React.ReactNode }) => {
+        const component = node.getComponent() as ComponentType;
+        const iconClass = PANE_ICONS[component];
+        if (iconClass) {
+            renderValues.leading = <i className={iconClass} style={{ marginRight: 4, fontSize: 13 }} />;
+        }
+    }, []);
+
+    return (
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+            <Layout
+                ref={layoutRef}
+                model={model}
+                factory={factory}
+                onRenderTab={onRenderTab}
+                icons={{
+                    close: (
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                            <line x1="1" y1="1" x2="9" y2="9" /><line x1="9" y1="1" x2="1" y2="9" />
+                        </svg>
+                    ),
+                    maximize: (
+                        <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                            <polyline points="1,4 1,1 4,1" /><line x1="1" y1="1" x2="5" y2="5" />
+                            <polyline points="10,7 10,10 7,10" /><line x1="10" y1="10" x2="6" y2="6" />
+                        </svg>
+                    ),
+                    restore: (
+                        <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                            <polyline points="7,1 10,1 10,4" /><line x1="6" y1="5" x2="10" y2="1" />
+                            <polyline points="4,10 1,10 1,7" /><line x1="5" y1="6" x2="1" y2="10" />
+                        </svg>
+                    ),
+                }}
+            />
+        </div>
+    );
 });

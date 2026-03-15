@@ -1,12 +1,37 @@
+/* ── JetBrainsMono Nerd Font — bundled ── */
+@font-face {
+    font-family: 'JetBrainsMono Nerd Font';
+    src: url('./fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+    font-weight: 400; font-style: normal;
+}
+@font-face {
+    font-family: 'JetBrainsMono Nerd Font';
+    src: url('./fonts/JetBrainsMonoNerdFont-Bold.ttf') format('truetype');
+    font-weight: 700; font-style: normal;
+}
+@font-face {
+    font-family: 'JetBrainsMono Nerd Font';
+    src: url('./fonts/JetBrainsMonoNerdFont-Italic.ttf') format('truetype');
+    font-weight: 400; font-style: italic;
+}
+@font-face {
+    font-family: 'JetBrainsMono Nerd Font';
+    src: url('./fonts/JetBrainsMonoNerdFont-BoldItalic.ttf') format('truetype');
+    font-weight: 700; font-style: italic;
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 
 html, body {
     margin: 0; padding: 0;
     width: 100%; height: 100%;
-    background: #0d0d17;
+    background: var(--pane-bg, #121212);
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 13px;
+    color: #e5e7eb;
 }
 
 #mineo-root {
@@ -14,28 +39,241 @@ html, body {
     min-height: 0;
     display: flex;
     flex-direction: column;
+    padding: 4px;
+    gap: 4px;
+    background: var(--pane-bg, #121212);
 }
 
-.nvim-widget { width: 100%; height: 100%; }
+/* ── xterm ── */
 .xterm { height: 100%; padding: 4px; }
 .xterm-viewport { overflow-y: hidden !important; }
 
-.mineo-toolbar {
-    height: 36px;
-    background: #12121f;
+/* ══════════════════════════════════════════════════════════════════════════
+   flexlayout-react — SmartPane visual style
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── CSS token overrides (scoped to .flexlayout__layout) ── */
+.flexlayout__layout {
+    --color-text:                       #e5e7eb;
+    --color-background:                 #1e1e1e;
+    --color-base:                       #121212;
+    --color-1:                          #121212;
+    --color-2:                          #1a1a1a;
+    --color-3:                          #222222;
+    --color-4:                          #333333;
+    --color-5:                          #3d3d3d;
+    --color-6:                          #484848;
+
+    --font-size:                        11px;
+    --font-family:                      -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+    /* Tab bar */
+    --color-tabset-background:          #2a2a2a;
+    --color-tabset-background-selected: #2a2a2a;
+    --color-tabset-background-maximized:#2a2a2a;
+    --color-tabset-header-background:   #2a2a2a;
+    --color-tabset-header:              #9ca3af;
+    --color-tabset-divider-line:        #333333;
+
+    /* Tab buttons */
+    --color-tab-content:                #1e1e1e;
+    --color-tab-selected:               #e5e7eb;
+    --color-tab-selected-background:    rgba(255,255,255,0.07);
+    --color-tab-unselected:             #6b7280;
+    --color-tab-unselected-background:  transparent;
+
+    /* Splitter */
+    --color-splitter:                   #121212;
+    --color-splitter-hover:             #60a5fa;
+    --color-splitter-drag:              #60a5fa;
+
+    /* Drag outlines */
+    --color-drag1:                      #60a5fa;
+    --color-drag2:                      #86efac;
+    --color-drag1-background:           rgba(96, 165, 250, 0.10);
+    --color-drag2-background:           rgba(134, 239, 172, 0.10);
+    --color-drag-rect-border:           #60a5fa;
+    --color-drag-rect-background:       rgba(30, 30, 30, 0.95);
+    --color-drag-rect:                  #e5e7eb;
+
+    /* Misc */
+    --color-toolbar-button-hover:       rgba(255,255,255,0.08);
+    --color-icon:                       #6b7280;
+    --color-overflow:                   #6b7280;
+    --color-edge-marker:                rgba(96,165,250,0.3);
+    --color-edge-icon:                  #e5e7eb;
+}
+
+/* ── Tabset: rounded card with border ── */
+.flexlayout__tabset {
+    border: 1px solid #333333;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 2px;
+    background: #1e1e1e;
+    transition: border-color 0.15s;
+}
+.flexlayout__tabset:hover {
+    border-color: #3d3d3d;
+}
+
+/* ── Tab bar: SmartPane header style ── */
+.flexlayout__tabset_tabbar_outer {
+    background: #2a2a2a;
+    border-bottom: 1px solid #333333;
+    padding: 0 6px;
+    min-height: 32px;
     display: flex;
     align-items: center;
-    padding: 0 8px;
-    gap: 6px;
-    border-bottom: 1px solid #2a2a3e;
+    touch-action: none; /* allow touch-to-mouse forwarder to handle drag */
 }
-.mineo-toolbar-btn {
-    padding: 4px 10px;
-    border: 1px solid #333;
+.flexlayout__tabset_tabbar_outer_top {
+    padding: 0 6px;
+    border-bottom: 1px solid #333333;
+    border-top: none;
+}
+
+/* ── Individual tab buttons ── */
+.flexlayout__tab_button {
+    padding: 4px 8px;
+    border-radius: 5px;
+    gap: 5px;
+    margin: 2px 1px;
+    transition: background 0.1s, color 0.1s;
+}
+.flexlayout__tab_button--selected {
+    background: rgba(255,255,255,0.07);
+    color: #e5e7eb;
+    border-bottom: none;           /* remove any underline from base */
+}
+.flexlayout__tab_button--unselected {
+    color: #6b7280;
+}
+.flexlayout__tab_button--unselected:hover {
+    color: #9ca3af;
+    background: rgba(255,255,255,0.04);
+}
+
+/* Tab title text: uppercase + tracking */
+.flexlayout__tab_button_content {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: inherit;
+}
+
+/* Devicon in tab leading slot */
+.flexlayout__tab_button_leading {
+    display: flex;
+    align-items: center;
+}
+.flexlayout__tab_button_leading i {
+    font-size: 13px;
+    color: #60a5fa;
+    line-height: 1;
+}
+
+/* ── Toolbar (maximize / restore / close buttons — right side) ── */
+.flexlayout__tab_toolbar {
+    padding: 0 2px 0 4px;
+    gap: 1px;
+}
+.flexlayout__tab_toolbar_button {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 4px;
-    background: #1a1a2e;
-    color: #ccc;
-    font-size: 12px;
-    cursor: pointer;
+    padding: 0;
+    color: #6b7280;
+    opacity: 0.55;
+    transition: opacity 0.1s, background 0.1s, color 0.1s;
 }
-.mineo-toolbar-btn:hover { background: #252540; color: #fff; }
+.flexlayout__tab_toolbar_button:hover {
+    opacity: 1;
+    background: #3d3d3d;
+    color: #e5e7eb;
+}
+.flexlayout__tab_toolbar_button svg,
+.flexlayout__tab_toolbar_button svg * {
+    stroke: currentColor;
+}
+
+/* ── Close button on each tab ── */
+.flexlayout__tab_button_trailing {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    opacity: 0;
+    transition: opacity 0.1s, background 0.1s, color 0.1s;
+}
+.flexlayout__tab_button:hover .flexlayout__tab_button_trailing,
+.flexlayout__tab_button--selected .flexlayout__tab_button_trailing {
+    opacity: 1;
+}
+.flexlayout__tab_button_trailing:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+.flexlayout__tab_button_trailing svg,
+.flexlayout__tab_button_trailing svg * {
+    stroke: currentColor;
+}
+
+/* ── Tab content area ── */
+.flexlayout__tab {
+    background: #1e1e1e;
+    color: #e5e7eb;
+}
+
+/* ── Tabset container: no background so pane content shows through ── */
+.flexlayout__tabset_container {
+    background: transparent;
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+}
+
+/* ── Splitter ── */
+.flexlayout__splitter {
+    background: #121212;
+    width: 4px;
+    height: 4px;
+}
+.flexlayout__splitter:hover,
+.flexlayout__splitter_drag {
+    background: #60a5fa;
+    border-radius: 4px;
+}
+/* Expand the invisible hit area to 20px on both axes for easy touch targeting */
+/* .flexlayout__splitter_extra { */
+/*     width: 20px; */
+/*     height: 20px; */
+/* } */
+
+/* ── Maximized tabset: no margin so it fills the space ── */
+.flexlayout__tabset-maximized {
+    margin: 2px;
+}
+
+/* ── Drag drop outline ── */
+.flexlayout__outline_rect,
+.flexlayout__outline_rect_edge {
+    border-radius: 8px;
+}
+
+/* ── Edge drop arrows ── */
+.flexlayout__edge_rect {
+    background-color: rgba(96, 165, 250, 0.25);
+    border-radius: 4px;
+}
+
+/* ── Scrollbar styling ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #444; }

@@ -1,14 +1,9 @@
 node_modules/
-lib/
 dist/
 config.json
 .secret
-plugins/*.vsix
-plugins/vscode-neovim/
-test-results/
+.DS_Store
 
-# Theia-generated build artifacts (live in app/, not root)
-/src-gen/
-/gen-webpack.config.js
-/gen-webpack.node.config.js
-/webpack.config.js
+# Go build artifacts
+server/client_dist/
+mineo

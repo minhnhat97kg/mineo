@@ -1,0 +1,145 @@
+.fe-root {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: transparent;
+    color: var(--ui-text, #ccc);
+    font-family: 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
+    font-size: 12px;
+    user-select: none;
+    padding: 4px 0;
+}
+
+.fe-root::-webkit-scrollbar {
+    width: 6px;
+}
+.fe-root::-webkit-scrollbar-track {
+    background: transparent;
+}
+.fe-root::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 3px;
+}
+.fe-root::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+.fe-entry {
+    display: flex;
+    align-items: center;
+    padding: 2px 8px 2px 0;
+    cursor: pointer;
+    white-space: nowrap;
+    height: 22px;
+}
+.fe-entry:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.fe-icon {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 14px;
+    line-height: 1;
+}
+
+/* devicon <i> inside icon cell */
+.fe-icon i {
+    font-size: 14px;
+    line-height: 1;
+    display: block;
+}
+
+/* SVG fallback (folder / generic file) */
+.fe-icon svg {
+    width: 13px;
+    height: 13px;
+    display: block;
+}
+
+.fe-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fe-dir > .fe-name {
+    color: #e0c882;
+}
+
+.fe-loading {
+    color: #555;
+    font-style: italic;
+    padding: 2px 8px 2px 26px;
+    height: 22px;
+    line-height: 22px;
+}
+
+.fe-error {
+    color: #f55;
+    padding: 8px;
+    font-size: 11px;
+}
+
+/* Inline rename / new file input */
+.fe-inline-input {
+    display: flex;
+    align-items: center;
+    height: 22px;
+    padding-right: 8px;
+}
+.fe-inline-input input {
+    flex: 1;
+    min-width: 0;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid #5865f2;
+    color: var(--ui-text, #fff);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 1px 4px;
+    outline: none;
+    border-radius: 2px;
+}
+.fe-inline-input input::selection {
+    background: #5865f2;
+}
+
+/* Context menu */
+.fe-context-menu {
+    position: fixed;
+    z-index: 1000;
+    background: var(--ui-surface, #1e1e2e);
+    border: 1px solid var(--ui-border, #2a2a3e);
+    border-radius: 4px;
+    padding: 4px 0;
+    min-width: 160px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    font-family: 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
+    font-size: 12px;
+}
+.fe-context-item {
+    padding: 4px 12px;
+    color: #ccc;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.fe-context-item:hover {
+    background: #5865f2;
+    color: #fff;
+}
+.fe-context-sep {
+    height: 1px;
+    background: var(--ui-border, #2a2a3e);
+    margin: 4px 0;
+}
+.fe-context-item-danger {
+    color: #f55;
+}
+.fe-context-item-danger:hover {
+    background: #c0392b;
+    color: #fff;
+}

@@ -1,19 +1,32 @@
-.PHONY: build build-all start clean
+.PHONY: build client-build go-build install start dev clean
 
-# Fast build: Compile TS and bundle with Webpack
-# Use this for UI/Logic changes in src/
-build:
-	cd app && npx tsc && npx webpack --config webpack.config.js --mode development
+# Build everything: client + Go binary
+build: client-build go-build
 
-# Full build: Regenerate Theia src-gen and bundle everything
-# Use this for dependency/config changes or first-time setup
-build-all:
-	cd app && npm run build
+# Install client dependencies
+install:
+	cd client && npm install
 
-# Start the application
-start:
-	npm start
+# Build the React client
+client-build:
+	cd client && npm run build
+
+# Copy client dist into server for embedding, then build Go binary
+go-build:
+	rm -rf server/client_dist
+	cp -r client/dist server/client_dist
+	cd server && go build -o ../mineo .
+
+# Start the Go server
+start: build
+	./mineo
+
+# Dev: run Go server from source
+dev:
+	rm -rf server/client_dist
+	cp -r client/dist server/client_dist
+	cd server && MINEO_CONFIG="$$(cd .. && pwd)/config.json" go run .
 
 # Clean build artifacts
 clean:
-	cd app && rm -rf lib src-gen dist
+	rm -rf server/client_dist mineo client/dist

@@ -1,0 +1,123 @@
+.sp-root {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    background: var(--ui-bg, #0d0d17);
+    color: var(--ui-text, #ccc);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px;
+    padding: 16px 24px;
+}
+
+.sp-root::-webkit-scrollbar {
+    width: 6px;
+}
+.sp-root::-webkit-scrollbar-track {
+    background: transparent;
+}
+.sp-root::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 3px;
+}
+
+.sp-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    color: var(--ui-text, #fff);
+}
+
+.sp-section {
+    margin-bottom: 24px;
+}
+
+.sp-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--ui-text-muted, #888);
+    margin-bottom: 12px;
+}
+
+.sp-field {
+    margin-bottom: 12px;
+}
+
+.sp-label {
+    display: block;
+    font-size: 13px;
+    color: var(--ui-text, #ccc);
+    margin-bottom: 4px;
+}
+
+.sp-desc {
+    font-size: 11px;
+    color: var(--ui-text-muted, #888);
+    margin-bottom: 4px;
+}
+
+.sp-input {
+    width: 100%;
+    max-width: 400px;
+    padding: 6px 8px;
+    background: var(--ui-surface, #1a1a2e);
+    border: 1px solid var(--ui-border, #2a2a3e);
+    color: var(--ui-text, #ccc);
+    font-family: 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
+    font-size: 13px;
+    border-radius: 3px;
+    outline: none;
+}
+.sp-input:focus {
+    border-color: var(--ui-accent, #5865f2);
+}
+
+.sp-input-number {
+    width: 80px;
+}
+
+.sp-select {
+    width: 100%;
+    max-width: 400px;
+    padding: 6px 8px;
+    background: var(--ui-surface, #1a1a2e);
+    border: 1px solid var(--ui-border, #2a2a3e);
+    color: var(--ui-text, #ccc);
+    font-size: 13px;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+.sp-select:focus {
+    border-color: var(--ui-accent, #5865f2);
+}
+
+.sp-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sp-btn {
+    padding: 6px 16px;
+    background: var(--ui-accent, #5865f2);
+    border: none;
+    color: #fff;
+    font-size: 12px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.sp-btn:hover {
+    opacity: 0.9;
+}
+
+.sp-status {
+    font-size: 11px;
+    color: #89e051;
+    margin-left: 8px;
+}
+
+.sp-status-error {
+    color: #f55;
+}

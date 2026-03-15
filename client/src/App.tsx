@@ -1,16 +1,17 @@
 import { useRef } from 'react';
-import { Toolbar } from './Toolbar';
+import { MenuBar } from './MenuBar';
 import { LayoutContainer, LayoutContainerHandle } from './LayoutContainer';
-import type { PaneRole } from './pty-control-service';
+
+type PaneType = 'neovim' | 'terminal' | 'explorer' | 'settings';
 
 export function App() {
     const layoutRef = useRef<LayoutContainerHandle>(null);
 
-    const handleAdd = (role: PaneRole) => layoutRef.current?.addPane(role);
+    const handleAddPane = (role: PaneType) => layoutRef.current?.addPane(role);
 
     return (
         <>
-            <Toolbar onAdd={handleAdd} />
+            <MenuBar onAddPane={handleAddPane} />
             <LayoutContainer ref={layoutRef} />
         </>
     );
