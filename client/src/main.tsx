@@ -26,7 +26,7 @@ document.addEventListener('touchmove', (e: TouchEvent) => {
     if (!(target instanceof Element)) { e.preventDefault(); return; }
 
     // Native-scrollable panes — let the browser handle it
-    if (target.closest('.fe-root') || target.closest('.fe-tree') || target.closest('.sp-root')) return;
+    if (target.closest('.fe-root') || target.closest('.sp-root')) return;
 
     // xterm — translate to wheel event so scrollback works
     const xtermEl = target.closest('.xterm');

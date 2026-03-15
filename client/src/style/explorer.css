@@ -8,47 +8,6 @@
     font-family: 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
     font-size: 12px;
     user-select: none;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-}
-
-/* ── Toolbar ── */
-.fe-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 6px;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    flex-shrink: 0;
-}
-
-.fe-toolbar-btn {
-    padding: 3px 10px;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 4px;
-    color: var(--ui-text, #ccc);
-    font-family: inherit;
-    font-size: 11px;
-    cursor: pointer;
-    white-space: nowrap;
-}
-.fe-toolbar-btn:hover:not(:disabled) {
-    background: rgba(255,255,255,0.12);
-    border-color: rgba(255,255,255,0.2);
-}
-.fe-toolbar-btn:disabled {
-    opacity: 0.4;
-    cursor: default;
-}
-
-/* ── Scrollable tree ── */
-.fe-tree {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
     padding: 4px 0;
 }
 
@@ -65,11 +24,6 @@
 .fe-root::-webkit-scrollbar-thumb:hover {
     background: #555;
 }
-
-.fe-tree::-webkit-scrollbar { width: 6px; }
-.fe-tree::-webkit-scrollbar-track { background: transparent; }
-.fe-tree::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-.fe-tree::-webkit-scrollbar-thumb:hover { background: #555; }
 
 .fe-entry {
     display: flex;

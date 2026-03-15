@@ -180,6 +180,73 @@ function ContextMenu({
     );
 }
 
+// ── Touch long-press hook ──
+// Uses native (non-passive) touch listeners so we can call preventDefault()
+// and suppress the browser's built-in long-press actions (text selection,
+// "Copy" popup, etc.) on iOS/iPadOS.
+
+const LONG_PRESS_MS = 600;
+const LONG_PRESS_MOVE_PX = 8;
+
+function useLongPress(
+    elRef: React.RefObject<HTMLElement | null>,
+    callback: (clientX: number, clientY: number) => void,
+) {
+    const callbackRef = useRef(callback);
+    callbackRef.current = callback;
+
+    useEffect(() => {
+        const el = elRef.current;
+        if (!el) return;
+
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let startX = 0;
+        let startY = 0;
+        let fired = false;
+
+        const onTouchStart = (e: TouchEvent) => {
+            const touch = e.touches[0];
+            startX = touch.clientX;
+            startY = touch.clientY;
+            fired = false;
+            timer = setTimeout(() => {
+                fired = true;
+                e.preventDefault(); // suppress browser long-press action
+                callbackRef.current(touch.clientX, touch.clientY);
+            }, LONG_PRESS_MS);
+        };
+
+        const onTouchMove = (e: TouchEvent) => {
+            const touch = e.changedTouches[0];
+            if (Math.abs(touch.clientX - startX) > LONG_PRESS_MOVE_PX ||
+                Math.abs(touch.clientY - startY) > LONG_PRESS_MOVE_PX) {
+                clearTimeout(timer);
+            }
+        };
+
+        const onTouchEnd = (e: TouchEvent) => {
+            clearTimeout(timer);
+            // If the long-press already fired, eat the touchend so it doesn't
+            // also trigger a click / tap on the element
+            if (fired) e.preventDefault();
+        };
+
+        el.addEventListener('touchstart',  onTouchStart, { passive: false });
+        el.addEventListener('touchmove',   onTouchMove,  { passive: true  });
+        el.addEventListener('touchend',    onTouchEnd,   { passive: false });
+        el.addEventListener('touchcancel', () => clearTimeout(timer), { passive: true });
+
+        return () => {
+            clearTimeout(timer);
+            el.removeEventListener('touchstart',  onTouchStart);
+            el.removeEventListener('touchmove',   onTouchMove);
+            el.removeEventListener('touchend',    onTouchEnd);
+        };
+    // Re-attach only when the element ref changes (callback is kept via callbackRef)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [elRef]);
+}
+
 // ── Tree entry component ──
 
 function TreeEntry({
@@ -196,7 +263,7 @@ function TreeEntry({
     depth: number;
     onToggle: (node: TreeNode) => void;
     onOpenFile: (path: string) => void;
-    onContextMenu: (e: React.MouseEvent, node: TreeNode, parentDir: string) => void;
+    onContextMenu: (e: React.MouseEvent | { clientX: number; clientY: number; preventDefault(): void; stopPropagation(): void }, node: TreeNode, parentDir: string) => void;
     inlineInput: InlineInputState | null;
     onInlineSubmit: (value: string) => void;
     onInlineCancel: () => void;
@@ -207,6 +274,8 @@ function TreeEntry({
 
     const isRenaming = inlineInput?.kind === 'rename' && inlineInput.existingPath === node.path;
 
+    const entryRef = useRef<HTMLDivElement>(null);
+
     const handleClick = () => {
         if (node.isDirectory) {
             onToggle(node);
@@ -215,12 +284,22 @@ function TreeEntry({
         }
     };
 
+    const triggerContextMenu = useCallback((clientX: number, clientY: number) => {
+        const parentDir = node.isDirectory ? node.path : node.path.substring(0, node.path.lastIndexOf('/'));
+        onContextMenu(
+            { clientX, clientY, preventDefault() {}, stopPropagation() {} },
+            node,
+            parentDir,
+        );
+    }, [node, onContextMenu]);
+
     const handleContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        const parentDir = node.isDirectory ? node.path : node.path.substring(0, node.path.lastIndexOf('/'));
-        onContextMenu(e, node, parentDir);
+        triggerContextMenu(e.clientX, e.clientY);
     };
+
+    useLongPress(entryRef, triggerContextMenu);
 
     if (isRenaming) {
         return (
@@ -241,6 +320,7 @@ function TreeEntry({
     return (
         <>
             <div
+                ref={entryRef}
                 className={`fe-entry ${node.isDirectory ? 'fe-dir' : ''}`}
                 style={{ paddingLeft: depth * 16 + 8 }}
                 onClick={handleClick}
@@ -291,7 +371,6 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
     const [error, setError] = useState<string | null>(null);
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
     const [inlineInput, setInlineInput] = useState<InlineInputState | null>(null);
-    const [uploading, setUploading] = useState(false);
     const rootDirRef = useRef<string | undefined>(rootDir);
     const uploadInputRef = useRef<HTMLInputElement>(null);
 
@@ -387,7 +466,7 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
         setNodes(prev => update(prev));
     }, []);
 
-    const handleContextMenu = useCallback((e: React.MouseEvent, node: TreeNode, parentDir: string) => {
+    const handleContextMenu = useCallback((e: React.MouseEvent | { clientX: number; clientY: number; preventDefault(): void; stopPropagation(): void }, node: TreeNode, parentDir: string) => {
         setContextMenu({ x: e.clientX, y: e.clientY, node, parentDir });
     }, []);
 
@@ -463,7 +542,6 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
     const handleUploadFiles = useCallback((files: FileList | null) => {
         if (!files || files.length === 0) return;
         const dir = uploadTargetDirRef.current || rootDirRef.current || '';
-        setUploading(true);
         const form = new FormData();
         for (let i = 0; i < files.length; i++) form.append('files', files[i]);
         fetch(`/api/files/upload?dir=${encodeURIComponent(dir)}`, { method: 'POST', body: form })
@@ -471,7 +549,6 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
             .then(() => refreshDir(dir))
             .catch(err => alert(`Upload failed: ${err.message}`))
             .finally(() => {
-                setUploading(false);
                 if (uploadInputRef.current) uploadInputRef.current.value = '';
             });
     }, [refreshDir]);
@@ -489,6 +566,20 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
         }
     }, []);
 
+    const triggerRootContextMenu = useCallback((clientX: number, clientY: number) => {
+        if (rootDirRef.current) {
+            setContextMenu({
+                x: clientX,
+                y: clientY,
+                node: { name: '', path: rootDirRef.current, isDirectory: true, expanded: true },
+                parentDir: rootDirRef.current,
+            });
+        }
+    }, []);
+
+    const rootRef = useRef<HTMLDivElement>(null);
+    useLongPress(rootRef, triggerRootContextMenu);
+
     if (error) {
         return <div className="fe-root"><div className="fe-error">{error}</div></div>;
     }
@@ -499,21 +590,11 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
         inlineInput.parentDir === rootDirRef.current;
 
     return (
-        <div className="fe-root" onContextMenu={handleRootContextMenu}>
-            {/* ── Toolbar ── */}
-            <div className="fe-toolbar">
-                <button
-                    className="fe-toolbar-btn"
-                    title="Upload files to workspace root"
-                    disabled={uploading}
-                    onClick={() => {
-                        uploadTargetDirRef.current = rootDirRef.current ?? '';
-                        uploadInputRef.current?.click();
-                    }}
-                >
-                    {uploading ? '⏳' : '⬆'} Upload
-                </button>
-            </div>
+        <div
+            ref={rootRef}
+            className="fe-root"
+            onContextMenu={handleRootContextMenu}
+        >
             {/* Hidden file input for uploads */}
             <input
                 ref={uploadInputRef}
@@ -522,30 +603,27 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
                 style={{ display: 'none' }}
                 onChange={e => handleUploadFiles(e.target.files)}
             />
-            {/* Scrollable tree area */}
-            <div className="fe-tree">
-                {showRootInput && (
-                    <InlineInput
-                        defaultValue=""
-                        depth={0}
-                        onSubmit={handleInlineSubmit}
-                        onCancel={handleInlineCancel}
-                    />
-                )}
-                {nodes.map(node => (
-                    <TreeEntry
-                        key={node.path}
-                        node={node}
-                        depth={0}
-                        onToggle={toggleNode}
-                        onOpenFile={onOpenFile}
-                        onContextMenu={handleContextMenu}
-                        inlineInput={inlineInput}
-                        onInlineSubmit={handleInlineSubmit}
-                        onInlineCancel={handleInlineCancel}
-                    />
-                ))}
-            </div>
+            {showRootInput && (
+                <InlineInput
+                    defaultValue=""
+                    depth={0}
+                    onSubmit={handleInlineSubmit}
+                    onCancel={handleInlineCancel}
+                />
+            )}
+            {nodes.map(node => (
+                <TreeEntry
+                    key={node.path}
+                    node={node}
+                    depth={0}
+                    onToggle={toggleNode}
+                    onOpenFile={onOpenFile}
+                    onContextMenu={handleContextMenu}
+                    inlineInput={inlineInput}
+                    onInlineSubmit={handleInlineSubmit}
+                    onInlineCancel={handleInlineCancel}
+                />
+            ))}
             {contextMenu && (
                 <ContextMenu
                     x={contextMenu.x}

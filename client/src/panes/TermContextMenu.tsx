@@ -106,33 +106,38 @@ export function useTermContextMenu({ role, elRef, termRef, sendData }: UseTermCo
     const close = useCallback(() => setMenu(null), []);
 
     const onLongPress = useCallback((clientX: number, clientY: number) => {
-        if (role === 'neovim') {
-            // Pass right-click directly to neovim — let it handle its own menu
-            const term = termRef.current;
-            const el   = elRef.current;
-            if (term && el) sendRightClick(term, el, clientX, clientY, sendData);
-            return;
+        const term = termRef.current;
+        const el   = elRef.current;
+
+        // Always send SGR right-click to the PTY — lets any terminal app (neovim,
+        // fzf, mc, etc.) handle it natively. For plain shells with no mouse mode,
+        // the sequence is silently ignored.
+        if (term && el) {
+            sendRightClick(term, el, clientX, clientY, sendData);
         }
 
-        // terminal role — show our custom Copy/Paste menu
-        const sel = termRef.current?.getSelection() ?? '';
-        const items: MenuItem[] = [
-            {
-                label: 'Copy',
-                disabled: !sel,
-                action: () => { if (sel) navigator.clipboard?.writeText(sel).catch(() => {}); },
-            },
-            {
-                label: 'Paste',
-                disabled: false,
-                action: () => {
-                    navigator.clipboard?.readText().then(text => {
-                        if (text) sendData(text);
-                    }).catch(() => {});
+        // Also show Copy/Paste overlay for terminal role — useful when no mouse
+        // reporting app is active. Neovim handles its own menu so skip it.
+        if (role === 'terminal') {
+            const sel = termRef.current?.getSelection() ?? '';
+            const items: MenuItem[] = [
+                {
+                    label: 'Copy',
+                    disabled: !sel,
+                    action: () => { if (sel) navigator.clipboard?.writeText(sel).catch(() => {}); },
                 },
-            },
-        ];
-        setMenu({ x: clientX, y: clientY, items });
+                {
+                    label: 'Paste',
+                    disabled: false,
+                    action: () => {
+                        navigator.clipboard?.readText().then(text => {
+                            if (text) sendData(text);
+                        }).catch(() => {});
+                    },
+                },
+            ];
+            setMenu({ x: clientX, y: clientY, items });
+        }
     }, [role, elRef, termRef, sendData]);
 
     useEffect(() => {

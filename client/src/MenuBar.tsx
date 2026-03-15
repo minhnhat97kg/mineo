@@ -17,6 +17,8 @@ interface Props {
     onAddPane: (role: PaneType) => void;
     keyboardLocked: boolean;
     onToggleKeyboard: () => void;
+    isFullscreen: boolean;
+    onToggleFullscreen: () => void;
 }
 
 // ── Input Modal ──
@@ -195,7 +197,7 @@ type ModalState =
     | { kind: 'openWorkspace' }
     | null;
 
-export function MenuBar({ onAddPane, keyboardLocked, onToggleKeyboard }: Props) {
+export function MenuBar({ onAddPane, keyboardLocked, onToggleKeyboard, isFullscreen, onToggleFullscreen }: Props) {
     const [openMenu, setOpenMenu] = useState<string | null>(null);
     const [modal, setModal] = useState<ModalState>(null);
 
@@ -262,16 +264,7 @@ export function MenuBar({ onAddPane, keyboardLocked, onToggleKeyboard }: Props) 
                 { label: 'Terminal', action: () => onAddPane('terminal') },
                 { label: 'Neovim', action: () => onAddPane('neovim') },
                 { separator: true, label: '' },
-                {
-                    label: document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen',
-                    action: () => {
-                        if (document.fullscreenElement) {
-                            document.exitFullscreen().catch(() => {});
-                        } else {
-                            document.documentElement.requestFullscreen().catch(() => {});
-                        }
-                    },
-                },
+                { label: isFullscreen ? 'Exit Fullscreen' : 'Fullscreen', action: onToggleFullscreen },
             ],
         },
     ];
