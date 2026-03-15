@@ -1,11 +1,50 @@
 /* Mineo: suppress Theia chrome we don't want */
 
-/* Hide tab bar in main panel — Neovim occupies the whole area, no tabs needed */
+/* Hide the main-panel tab bar only when Mineo is the sole tab.
+   When a second widget (e.g. Preferences) is open the tab bar becomes
+   visible automatically because Theia adds .lm-mod-hidden only when
+   there is a single tab and it's our tiling panel.
+   We hide it while only the tiling panel is present so we don't show
+   a redundant "Mineo" tab above our own internal tab bar. */
+/* Main-panel tab bar is now our primary tab bar. Controls (Add/Settings)
+   are injected into it via TilingLayoutService. */
 #theia-main-content-panel > .lm-TabBar {
-  display: none !important;
-  height: 0 !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  background: rgba(17, 17, 27, 0.72) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.05) !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  max-height: 20px !important;
+  font-size: 11px;
+}
+
+#theia-main-content-panel > .lm-TabBar .lm-TabBar-content {
+  display: flex !important;
+  align-items: center !important;
+  height: 100% !important;
+}
+
+#theia-main-content-panel > .lm-TabBar .lm-TabBar-tab {
+  height: 20px !important;
+  min-height: 20px !important;
+  max-height: 20px !important;
+  padding: 0 10px !important;
+  line-height: 20px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+#theia-main-content-panel > .lm-TabBar .lm-TabBar-tabIcon,
+#theia-main-content-panel > .lm-TabBar .lm-TabBar-tabCloseIcon {
+  width: 12px !important;
+  height: 12px !important;
+  min-width: 12px !important;
+  min-height: 12px !important;
+  background-size: 10px !important;
+  margin: 0 4px !important;
 }
 
 /* Menu bar */
@@ -17,7 +56,28 @@
 */
 
 /* Status bar area for activity bar toggle button */
-.theia-left-panel-toggle-button {
+.theia-left-panel-toggle-button,
+.theia-right-panel-toggle-button {
+  display: none !important;
+}
+
+/* Completely suppress Right Sidebar (Outline/etc) */
+.theia-app-right,
+#theia-right-side-panel,
+#theia-right-content-panel,
+.theia-app-right-center,
+.theia-right-panel-toggle-button {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+
+/* Hide Monaco Minimap (often confused with outline bar) */
+.minimap {
   display: none !important;
 }
 
@@ -204,6 +264,8 @@
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  width: 100%;
+  height: 100%;
 }
 
 /* xterm container and canvas must fill the widget 100% */
@@ -212,11 +274,6 @@
   overflow: hidden;
 }
 
-.nvim-widget .xterm-viewport,
-.nvim-widget .xterm-screen {
-  width: 100% !important;
-  height: 100% !important;
-}
 
 /* ── Touch Toolbar — Antigravity ───────────────────────────────────────────── */
 
@@ -321,46 +378,20 @@
   border: 1px solid rgba(137, 180, 250, 0.35);
 }
 
-/* ── Menu Bar Collapse/Expand ──────────────────────────────────────────────── */
+/* Menu bar is always visible — no collapse toggle */
 
-/* Collapsed state: top panel animates to zero height */
-#theia-top-panel.menu-collapsed {
-  max-height: 0 !important;
-  padding: 0 !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  overflow: hidden !important;
-}
+/* ── RAM usage indicator in status bar ──────────────────────────────────── */
 
-/* Chevron toggle button — fixed so it survives bar collapse */
-.nvim-menu-toggle {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 22px;
-  height: 22px;
-  z-index: 200;
-  background: rgba(17, 17, 27, 0.55);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: none;
-  border-bottom-right-radius: 6px;
-  color: rgba(205, 214, 244, 0.45);
+.mineo-ram-status {
+  color: rgba(205, 214, 244, 0.55);
   font-size: 11px;
-  line-height: 22px;
-  text-align: center;
-  cursor: pointer;
+  padding: 0 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: default;
   user-select: none;
-  transition: color 0.15s, background 0.15s;
-  display: none; /* hidden until contribution mounts it */
 }
 
-.nvim-menu-toggle:hover {
-  color: rgba(205, 214, 244, 0.9);
-  background: rgba(17, 17, 27, 0.75);
-}
-
-/* Only show the toggle button when the menu is collapsed */
-body.nvim-menu-collapsed .nvim-menu-toggle {
-  display: block;
+.mineo-ram-status:hover {
+  color: rgba(205, 214, 244, 0.85);
 }
