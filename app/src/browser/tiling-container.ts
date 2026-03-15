@@ -289,6 +289,15 @@ export class TilingContainer extends BaseWidget {
                 this.pendingRebuild = this.rebuildLayout();
             })
         );
+
+        // Sync active-pane CSS whenever the model's focus changes
+        this.toDispose.push(
+            this.layoutTreeManager.onFocusChange(leafId => {
+                for (const [id, wrapper] of this.wrapperMap) {
+                    wrapper.node.classList.toggle('mineo-pane-active', id === leafId);
+                }
+            })
+        );
     }
 
     /** Build the initial layout tree. Call after widget is attached. */
@@ -385,9 +394,6 @@ export class TilingContainer extends BaseWidget {
     }
 
     private setActivePane(leafId: string): void {
-        for (const [id, wrapper] of this.wrapperMap) {
-            wrapper.node.classList.toggle('mineo-pane-active', id === leafId);
-        }
         this.layoutTreeManager.setFocusedLeaf(leafId);
     }
 
