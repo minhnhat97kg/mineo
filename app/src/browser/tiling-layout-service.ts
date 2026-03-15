@@ -265,7 +265,7 @@ export class TilingLayoutService {
                 if (layout.tabs.length > 0) {
                     const newContainer = this.createTab(layout.tabs[0]);
                     this.shell.activateWidget(newContainer.id);
-                    requestAnimationFrame(() => newContainer.focusFirst());
+                    newContainer.pendingRebuild.then(() => newContainer.focusFirst());
                 }
             }
         } else {
