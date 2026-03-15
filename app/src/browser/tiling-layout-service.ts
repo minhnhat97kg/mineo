@@ -122,8 +122,8 @@ export class TilingLayoutService {
             this.shell.activateWidget(container.id);
         }
         
-        // Build the layout tree
-        container.buildLayout();
+        // Build the layout tree; store the promise so focus callers can await it
+        container.pendingRebuild = container.buildLayout();
 
         return container;
     }
@@ -133,7 +133,7 @@ export class TilingLayoutService {
         const tabLayout = this.layoutTreeManager.addTab(role);
         const container = this.createTab(tabLayout);
         this.shell.activateWidget(container.id);
-        requestAnimationFrame(() => container.focusFirst());
+        container.pendingRebuild.then(() => container.focusFirst());
     }
 
     /** Close a tab by its tabId. */
