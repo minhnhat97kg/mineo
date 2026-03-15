@@ -11,11 +11,12 @@ import { FrontendApplicationContribution } from '@theia/core/lib/browser';
 export class RamStatusContribution implements FrontendApplicationContribution {
     private spanEl: HTMLElement | null = null;
     private intervalId: ReturnType<typeof setInterval> | null = null;
+    private polling = false;
 
     onStart(): void {
-        this._injectSpan();
-        this._poll();
-        this.intervalId = setInterval(() => this._poll(), 5000);
+        this.injectSpan();
+        this.poll();
+        this.intervalId = setInterval(() => this.poll(), 5000);
     }
 
     onStop(): void {
@@ -25,7 +26,7 @@ export class RamStatusContribution implements FrontendApplicationContribution {
         }
     }
 
-    private _injectSpan(): void {
+    private injectSpan(): void {
         const statusBar = document.getElementById('theia-statusBar');
         if (!statusBar || statusBar.querySelector('.mineo-ram-status')) return;
 
@@ -36,13 +37,14 @@ export class RamStatusContribution implements FrontendApplicationContribution {
         this.spanEl = span;
     }
 
-    private async _poll(): Promise<void> {
-        // Retry injection if the status bar wasn't ready during onStart
+    private async poll(): Promise<void> {
+        if (this.polling) return;
         if (!this.spanEl) {
-            this._injectSpan();
+            this.injectSpan();
         }
         if (!this.spanEl) return;
 
+        this.polling = true;
         try {
             const res = await fetch('/api/metrics');
             if (!res.ok) return;
@@ -50,6 +52,8 @@ export class RamStatusContribution implements FrontendApplicationContribution {
             this.spanEl.textContent = `💾 ${data.appMB}MB / ${data.totalGB}GB`;
         } catch {
             // Silently ignore network errors — stale value stays visible
+        } finally {
+            this.polling = false;
         }
     }
 }
