@@ -5,7 +5,13 @@ import { ptyControlService, PaneRole } from './pty-control-service';
 const STORAGE_KEY = 'mineo.layout';
 const pool = new Map<string, NvimWidget>();
 
-function uuid(): string { return crypto.randomUUID(); }
+function uuid(): string {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+}
 function cwd(): string | undefined { const h = location.hash.replace(/^#/, ''); return h.startsWith('/') ? h : undefined; }
 
 function getOrCreate(instanceId: string, role: PaneRole): NvimWidget {
