@@ -22,6 +22,7 @@ import { ServiceConnectionProvider, RemoteConnectionProvider } from '@theia/core
 import { SelectionService } from '@theia/core/lib/common/selection-service';
 import { UriSelection } from '@theia/core/lib/common/selection';
 import { FileNavigatorContribution, NavigatorContextMenu } from '@theia/navigator/lib/browser/navigator-contribution';
+import { FileService } from '@theia/filesystem/lib/browser/file-service';
 import { MonarchTokenizer } from './monarch-tokenizer';
 import { PaneRegistry } from './panes/index';
 import { neovimPaneDescriptor } from './panes/neovim-pane';
@@ -35,6 +36,7 @@ import { bindNvimWidgetFactory } from './nvim-widget-factory';
 import { TilingCommandContribution } from './tiling-commands';
 import { SettingsContribution } from './settings-widget';
 import { NvimPreferenceContribution, NvimPreferenceSyncContribution } from './nvim-preferences';
+import { RamStatusContribution } from './ram-status-contribution';
 import { PreferenceContribution } from '@theia/core/lib/common/preferences/preference-schema';
 
 // Increase disconnected buffer size to 50MB (default is 100KB)
@@ -211,6 +213,7 @@ class NvimOpenHandler implements OpenHandler {
   @inject(MessageService) protected readonly messageService!: MessageService;
   @inject(TilingLayoutService) protected readonly tilingLayoutService!: TilingLayoutService;
   @inject(LayoutTreeManager) protected readonly layoutTreeManager!: LayoutTreeManager;
+  @inject(FileService) protected readonly fileService!: FileService;
 
   canHandle(uri: URI): number {
     if (uri.scheme !== 'file') return -1;
@@ -219,10 +222,52 @@ class NvimOpenHandler implements OpenHandler {
 
   async open(uri: URI): Promise<object | undefined> {
     const filePath = uri.path.toString();
+
+    // If a Monaco pane is focused, open the file in that pane
+    const focusedLeafId = this.layoutTreeManager.focusedLeafId;
+    if (focusedLeafId) {
+      const found = this.layoutTreeManager.findLeaf(focusedLeafId);
+      if (found && found.leaf.role === 'monaco') {
+        const container = this.tilingLayoutService.getActiveContainer();
+        if (container) {
+          const wrapper = container.getWidget(focusedLeafId);
+          const innerWidget = (wrapper as any)?.getInnerWidget?.();
+          // innerWidget is a MonacoEditorWidget — access the raw editor directly
+          const control: monaco.editor.IStandaloneCodeEditor | undefined =
+              (innerWidget as any)?.monacoEditor;
+          if (control) {
+            const monacoUri = monaco.Uri.parse(uri.toString());
+            // Reuse existing Monaco model for this URI if already loaded
+            let model = monaco.editor.getModel(monacoUri);
+            if (!model) {
+              try {
+                const fileContent = await this.fileService.readFile(uri);
+                const text = new TextDecoder().decode(fileContent.value.buffer);
+                const ext = uri.path.toString().split('.').pop()?.toLowerCase();
+                const langMap: Record<string, string> = {
+                  ts: 'typescript', tsx: 'typescript',
+                  js: 'javascript', jsx: 'javascript', mjs: 'javascript',
+                  py: 'python', go: 'go', rs: 'rust',
+                  json: 'json', md: 'markdown', html: 'html',
+                  css: 'css', sh: 'shellscript', yaml: 'yaml', yml: 'yaml',
+                };
+                const lang = ext ? langMap[ext] : undefined;
+                model = monaco.editor.createModel(text, lang, monacoUri);
+              } catch {
+                model = monaco.editor.createModel('', undefined, monacoUri);
+              }
+            }
+            control.setModel(model);
+            container.focusLeaf(focusedLeafId);
+            return { handled: true };
+          }
+        }
+      }
+    }
+
     try {
       // Build URL — target the focused pane's nvim instance if known
       let url = '/api/nvim-open?file=' + encodeURIComponent(filePath);
-      const focusedLeafId = this.layoutTreeManager.focusedLeafId;
       if (focusedLeafId) {
         const found = this.layoutTreeManager.findLeaf(focusedLeafId);
         if (found && found.leaf.role === 'neovim') {
@@ -407,6 +452,10 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   // LSP client — raw JSON-RPC over WebSocket for hover/completion/definition
   bind(LspClientManager).toSelf().inSingletonScope();
   bind(FrontendApplicationContribution).to(LspClientManager).inSingletonScope();
+
+  // RAM usage indicator in the bottom status bar
+  bind(RamStatusContribution).toSelf().inSingletonScope();
+  bind(FrontendApplicationContribution).toService(RamStatusContribution);
 
   // Suppress breadcrumbs
   try {
