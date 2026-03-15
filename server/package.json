@@ -1,0 +1,28 @@
+{
+  "name": "mineo-server",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/server.ts",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "cookie": "^0.6.0",
+    "express": "^4.19.0",
+    "express-session": "^1.18.0",
+    "memorystore": "^1.6.7",
+    "node-pty": "^1.0.0",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "@types/cookie": "^0.6.0",
+    "@types/express": "^4.17.21",
+    "@types/express-session": "^1.17.10",
+    "@types/node": "^18.0.0",
+    "@types/ws": "^8.5.10",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.4.0"
+  }
+}
