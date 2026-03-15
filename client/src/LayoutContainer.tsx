@@ -72,6 +72,7 @@ export const LayoutContainer = forwardRef<LayoutContainerHandle>(function Layout
             try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) as LayoutConfig : null; } catch { return null; }
         })();
 
+        gl.init();
         try { gl.loadLayout(saved ?? defaultLayout()); }
         catch { gl.loadLayout(defaultLayout()); }
 
