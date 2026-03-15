@@ -224,10 +224,8 @@ export class TilingLayoutService {
         const newLeaf = this.layoutTreeManager.splitPane(tabId, leafId, direction, role);
         if (!newLeaf) return;
 
-        // rebuildLayout is triggered by onLayoutChange subscription in TilingContainer.
-        requestAnimationFrame(() => {
-            container.focusLeaf(newLeaf.id);
-        });
+        // Wait for the reactive rebuildLayout triggered by onLayoutChange to complete.
+        container.pendingRebuild.then(() => container.focusLeaf(newLeaf.id));
     }
 
     /** Close the focused pane. */
@@ -272,7 +270,7 @@ export class TilingLayoutService {
             }
         } else {
             // rebuildLayout triggered by onLayoutChange; focus first remaining leaf after settle
-            requestAnimationFrame(() => {
+            container.pendingRebuild.then(() => {
                 const leaves = this.layoutTreeManager.getTabLeaves(tabId);
                 if (leaves.length > 0) container.focusLeaf(leaves[0].id);
             });
@@ -317,9 +315,7 @@ export class TilingLayoutService {
 
         const newLeaf = this.layoutTreeManager.splitPane(tabId, leafId, 'horizontal', 'neovim');
         if (!newLeaf) return;
-        requestAnimationFrame(() => {
-            container.focusLeaf(newLeaf.id);
-        });
+        container.pendingRebuild.then(() => container.focusLeaf(newLeaf.id));
 
         try {
             const url = '/api/nvim-open?file=' + encodeURIComponent(filePath)
@@ -355,7 +351,7 @@ export class TilingLayoutService {
 
         const newLeaf = this.layoutTreeManager.splitPane(tabId, leafId, direction, role as any);
         if (!newLeaf) return;
-        requestAnimationFrame(() => container.focusLeaf(newLeaf.id));
+        container.pendingRebuild.then(() => container.focusLeaf(newLeaf.id));
     }
 
     /** Inject "+" and "⚙" buttons into Theia's main tab bar. */

@@ -245,6 +245,9 @@ class PaneWrapper extends BaseWidget {
 // ── TilingContainer ───────────────────────────────────────────────────────────
 
 export class TilingContainer extends BaseWidget {
+    /** Resolves when the current rebuildLayout() call completes. */
+    pendingRebuild: Promise<void> = Promise.resolve();
+
     /** Map from leaf ID → PaneWrapper */
     private wrapperMap = new Map<string, PaneWrapper>();
     /** Map from split ID → SplitPanel */
@@ -283,7 +286,7 @@ export class TilingContainer extends BaseWidget {
                 const freshTab = this.layoutTreeManager.layout.tabs.find(t => t.id === this.tabLayout.id);
                 if (!freshTab) return; // tab was removed — TilingLayoutService handles shell cleanup
                 this.tabLayout = freshTab;
-                this.rebuildLayout();
+                this.pendingRebuild = this.rebuildLayout();
             })
         );
     }
