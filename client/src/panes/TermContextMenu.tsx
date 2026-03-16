@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Terminal } from 'xterm';
+import { useLongPress } from '../use-long-press';
 
 interface MenuItem {
     label: string;
@@ -101,7 +102,6 @@ function sendRightClick(term: Terminal, el: HTMLElement, clientX: number, client
 
 export function useTermContextMenu({ role, elRef, termRef, sendData }: UseTermContextMenuOptions) {
     const [menu, setMenu] = useState<ContextMenuState | null>(null);
-    const holdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
     const close = useCallback(() => setMenu(null), []);
 
@@ -140,43 +140,7 @@ export function useTermContextMenu({ role, elRef, termRef, sendData }: UseTermCo
         }
     }, [role, elRef, termRef, sendData]);
 
-    useEffect(() => {
-        const el = elRef.current;
-        if (!el) return;
-
-        // Cancel long-press if finger moves more than this many pixels
-        const MOVE_THRESHOLD = 8;
-        let startX = 0;
-        let startY = 0;
-
-        const onTouchStart = (e: TouchEvent) => {
-            const touch = e.touches[0];
-            startX = touch.clientX;
-            startY = touch.clientY;
-            holdTimer.current = setTimeout(() => {
-                onLongPress(touch.clientX, touch.clientY);
-            }, 650);
-        };
-        const onTouchMove = (e: TouchEvent) => {
-            const touch = e.changedTouches[0];
-            if (Math.abs(touch.clientX - startX) > MOVE_THRESHOLD ||
-                Math.abs(touch.clientY - startY) > MOVE_THRESHOLD) {
-                clearTimeout(holdTimer.current);
-            }
-        };
-        const onTouchEnd   = () => clearTimeout(holdTimer.current);
-
-        el.addEventListener('touchstart', onTouchStart, { passive: true });
-        el.addEventListener('touchmove',  onTouchMove,  { passive: true });
-        el.addEventListener('touchend',   onTouchEnd,   { passive: true });
-
-        return () => {
-            clearTimeout(holdTimer.current);
-            el.removeEventListener('touchstart', onTouchStart);
-            el.removeEventListener('touchmove',  onTouchMove);
-            el.removeEventListener('touchend',   onTouchEnd);
-        };
-    }, [elRef, onLongPress]);
+    useLongPress(elRef, onLongPress);
 
     return { menu, close };
 }

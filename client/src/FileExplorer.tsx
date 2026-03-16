@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getFileIcon, getOpenFolderIcon } from './file-icons';
+import { useLongPress } from './use-long-press';
 
 interface FileEntry {
     name: string;
@@ -178,73 +179,6 @@ function ContextMenu({
             <div className="fe-context-item fe-context-item-danger" onClick={() => onAction('delete')}>Delete</div>
         </div>
     );
-}
-
-// ── Touch long-press hook ──
-// Uses native (non-passive) touch listeners so we can call preventDefault()
-// and suppress the browser's built-in long-press actions (text selection,
-// "Copy" popup, etc.) on iOS/iPadOS.
-
-const LONG_PRESS_MS = 600;
-const LONG_PRESS_MOVE_PX = 8;
-
-function useLongPress(
-    elRef: React.RefObject<HTMLElement | null>,
-    callback: (clientX: number, clientY: number) => void,
-) {
-    const callbackRef = useRef(callback);
-    callbackRef.current = callback;
-
-    useEffect(() => {
-        const el = elRef.current;
-        if (!el) return;
-
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        let startX = 0;
-        let startY = 0;
-        let fired = false;
-
-        const onTouchStart = (e: TouchEvent) => {
-            const touch = e.touches[0];
-            startX = touch.clientX;
-            startY = touch.clientY;
-            fired = false;
-            timer = setTimeout(() => {
-                fired = true;
-                e.preventDefault(); // suppress browser long-press action
-                callbackRef.current(touch.clientX, touch.clientY);
-            }, LONG_PRESS_MS);
-        };
-
-        const onTouchMove = (e: TouchEvent) => {
-            const touch = e.changedTouches[0];
-            if (Math.abs(touch.clientX - startX) > LONG_PRESS_MOVE_PX ||
-                Math.abs(touch.clientY - startY) > LONG_PRESS_MOVE_PX) {
-                clearTimeout(timer);
-            }
-        };
-
-        const onTouchEnd = (e: TouchEvent) => {
-            clearTimeout(timer);
-            // If the long-press already fired, eat the touchend so it doesn't
-            // also trigger a click / tap on the element
-            if (fired) e.preventDefault();
-        };
-
-        el.addEventListener('touchstart',  onTouchStart, { passive: false });
-        el.addEventListener('touchmove',   onTouchMove,  { passive: true  });
-        el.addEventListener('touchend',    onTouchEnd,   { passive: false });
-        el.addEventListener('touchcancel', () => clearTimeout(timer), { passive: true });
-
-        return () => {
-            clearTimeout(timer);
-            el.removeEventListener('touchstart',  onTouchStart);
-            el.removeEventListener('touchmove',   onTouchMove);
-            el.removeEventListener('touchend',    onTouchEnd);
-        };
-    // Re-attach only when the element ref changes (callback is kept via callbackRef)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [elRef]);
 }
 
 // ── Tree entry component ──
