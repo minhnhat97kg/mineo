@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-const LONG_PRESS_MS    = 650;
+const LONG_PRESS_MS    = 1000;
 const LONG_PRESS_MOVE  = 8; // px — cancel if finger moves more than this
 
 /**
