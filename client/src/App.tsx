@@ -2,16 +2,35 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { MenuBar } from './MenuBar';
 import { LayoutContainer, LayoutContainerHandle } from './LayoutContainer';
 import { ReconnectOverlay } from './ReconnectOverlay';
+import { LoginScreen } from './LoginScreen';
 
 type PaneType = 'neovim' | 'terminal' | 'explorer' | 'settings';
 
 // iOS Safari does not support the Fullscreen API at all.
 const supportsFullscreen = !!document.documentElement.requestFullscreen;
 
+// 'checking' | 'login' | 'app'
+type AuthState = 'checking' | 'login' | 'app';
+
 export function App() {
     const layoutRef = useRef<LayoutContainerHandle>(null);
     const [keyboardLocked, setKeyboardLocked] = useState(true);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [authState, setAuthState] = useState<AuthState>('checking');
+
+    // On mount, probe a protected endpoint to decide whether to show login screen.
+    useEffect(() => {
+        fetch('/api/files', { cache: 'no-store', redirect: 'manual' })
+            .then(res => {
+                // opaqueredirect means the server redirected to /login (not authed)
+                if (res.type === 'opaqueredirect' || res.status === 401 || res.status === 302) {
+                    setAuthState('login');
+                } else {
+                    setAuthState('app');
+                }
+            })
+            .catch(() => setAuthState('app')); // network error — let the app handle it
+    }, []);
 
     // Track real fullscreen changes (non-iOS)
     useEffect(() => {
@@ -35,6 +54,13 @@ export function App() {
     }, []);
 
     const handleAddPane = (role: PaneType) => layoutRef.current?.addPane(role);
+
+    // Show nothing while probing auth (avoids flash of login screen for authed users)
+    if (authState === 'checking') return null;
+
+    if (authState === 'login') {
+        return <LoginScreen onSuccess={() => setAuthState('app')} />;
+    }
 
     return (
         // On iOS, .app-fullscreen makes #mineo-root cover the whole screen
