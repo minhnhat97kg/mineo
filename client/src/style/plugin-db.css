@@ -1,0 +1,629 @@
+/* plugin-db.css — Database plugin styles (prefix: db-) */
+
+/* ── Root container ─────────────────────────────────────────────────────────── */
+
+.db-root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--ui-bg);
+    color: var(--ui-text);
+    font-size: 13px;
+}
+
+/* ── Shared utilities ────────────────────────────────────────────────────────── */
+
+.db-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--ui-border);
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+
+.db-btn:hover {
+    background: var(--ui-accent);
+    border-color: var(--ui-accent);
+    color: #fff;
+}
+
+.db-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.db-btn-primary {
+    background: var(--ui-accent);
+    border-color: var(--ui-accent);
+    color: #fff;
+}
+
+.db-btn-primary:hover {
+    filter: brightness(1.15);
+}
+
+.db-btn-danger {
+    color: #e06c75;
+    border-color: #e06c75;
+}
+
+.db-btn-danger:hover {
+    background: #e06c75;
+    color: #fff;
+}
+
+.db-btn-ghost {
+    border-color: transparent;
+    background: transparent;
+}
+
+.db-btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--ui-border);
+    color: var(--ui-text);
+}
+
+.db-loading {
+    padding: 24px;
+    text-align: center;
+    color: var(--ui-text-muted);
+}
+
+.db-error-banner {
+    padding: 8px 12px;
+    background: rgba(224, 108, 117, 0.15);
+    border: 1px solid rgba(224, 108, 117, 0.4);
+    border-radius: 4px;
+    color: #e06c75;
+    margin: 8px 0;
+    font-size: 12px;
+}
+
+/* ── Driver badge ────────────────────────────────────────────────────────────── */
+
+.db-driver-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #fff;
+}
+
+.db-driver-badge.db-driver-postgres  { background: #336791; }
+.db-driver-badge.db-driver-mysql     { background: #f29111; color: #111; }
+.db-driver-badge.db-driver-sqlite    { background: #0f80cc; }
+.db-driver-badge.db-driver-mongo     { background: #4db33d; }
+
+/* ── Connection list ─────────────────────────────────────────────────────────── */
+
+.db-conn-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.db-conn-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--ui-border);
+    flex-shrink: 0;
+}
+
+.db-conn-list-header h2 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--ui-text);
+}
+
+.db-conn-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--ui-border);
+    cursor: default;
+    transition: background 0.1s;
+}
+
+.db-conn-card:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.db-conn-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.db-conn-card-label {
+    font-weight: 500;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.db-conn-card-sub {
+    font-size: 11px;
+    color: var(--ui-text-muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.db-conn-card-actions {
+    display: flex;
+    gap: 5px;
+    flex-shrink: 0;
+}
+
+.db-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--ui-border);
+    transition: background 0.2s;
+}
+
+.db-status-dot.db-connected {
+    background: #98c379;
+    box-shadow: 0 0 4px rgba(152, 195, 121, 0.5);
+}
+
+.db-conn-empty {
+    padding: 32px 20px;
+    text-align: center;
+    color: var(--ui-text-muted);
+    font-size: 13px;
+}
+
+/* ── Connection form ─────────────────────────────────────────────────────────── */
+
+.db-form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.db-form-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--ui-border);
+    flex-shrink: 0;
+}
+
+.db-form-header h2 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+    flex: 1;
+}
+
+.db-form-body {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+}
+
+.db-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.db-field label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ui-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.db-field input,
+.db-field select {
+    padding: 6px 9px;
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.db-field input:focus,
+.db-field select:focus {
+    border-color: var(--ui-accent);
+}
+
+.db-field input[type="password"] {
+    letter-spacing: 0.08em;
+}
+
+.db-field-row {
+    display: flex;
+    gap: 8px;
+}
+
+.db-field-row .db-field {
+    flex: 1;
+}
+
+.db-field-row .db-field-port {
+    flex: 0 0 90px;
+}
+
+.db-form-section {
+    border-top: 1px solid var(--ui-border);
+    padding-top: 12px;
+    margin-top: 4px;
+}
+
+.db-form-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ui-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+}
+
+.db-form-footer {
+    display: flex;
+    gap: 8px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--ui-border);
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+.db-test-result {
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 3px;
+    align-self: center;
+    flex: 1;
+}
+
+.db-test-result.db-test-ok  { color: #98c379; }
+.db-test-result.db-test-err { color: #e06c75; }
+
+/* ── Workspace ───────────────────────────────────────────────────────────────── */
+
+.db-workspace {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.db-workspace-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--ui-border);
+    flex-shrink: 0;
+    background: var(--ui-surface);
+}
+
+.db-workspace-name {
+    font-weight: 600;
+    font-size: 13px;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.db-workspace-wrap {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+/* ── Schema tree ─────────────────────────────────────────────────────────────── */
+
+.db-schema-tree {
+    width: 240px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--ui-border);
+    overflow-y: auto;
+    background: var(--ui-bg);
+    user-select: none;
+}
+
+.db-schema-tree-header {
+    padding: 8px 10px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ui-text-muted);
+    border-bottom: 1px solid var(--ui-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.db-tree-loading {
+    padding: 12px;
+    font-size: 12px;
+    color: var(--ui-text-muted);
+}
+
+.db-tree-node {
+    cursor: pointer;
+}
+
+.db-tree-node-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    font-size: 12px;
+    transition: background 0.1s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.db-tree-node-label:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.db-tree-node-label.db-tree-selected {
+    background: rgba(97, 175, 239, 0.18);
+    color: var(--ui-accent);
+}
+
+.db-tree-icon {
+    font-size: 11px;
+    width: 14px;
+    text-align: center;
+    flex-shrink: 0;
+    color: var(--ui-text-muted);
+}
+
+.db-tree-node-label.db-tree-level-0 { padding-left: 6px;  font-weight: 600; }
+.db-tree-node-label.db-tree-level-1 { padding-left: 18px; font-weight: 500; color: #98c379; }
+.db-tree-node-label.db-tree-level-1.db-tree-type-view { color: #c678dd; }
+.db-tree-node-label.db-tree-level-1.db-tree-type-collection { color: #4db33d; }
+.db-tree-node-label.db-tree-level-2 { padding-left: 32px; color: var(--ui-text-muted); font-size: 11px; }
+
+.db-tree-caret {
+    font-size: 9px;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+    color: var(--ui-text-muted);
+}
+
+.db-tree-caret.db-open {
+    transform: rotate(90deg);
+}
+
+.db-tree-children {
+    overflow: hidden;
+}
+
+.db-type-hint {
+    font-size: 10px;
+    color: var(--ui-text-muted);
+    margin-left: auto;
+    padding-left: 4px;
+    flex-shrink: 0;
+}
+
+/* ── Right panel ─────────────────────────────────────────────────────────────── */
+
+.db-right-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* ── SQL editor ──────────────────────────────────────────────────────────────── */
+
+.db-editor-wrap {
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid var(--ui-border);
+    flex-shrink: 0;
+    background: var(--ui-bg);
+}
+
+.db-editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--ui-border);
+    flex-shrink: 0;
+}
+
+.db-editor-label {
+    font-size: 11px;
+    color: var(--ui-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.db-editor-spacer { flex: 1; }
+
+.db-limit-select {
+    padding: 3px 7px;
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.db-textarea {
+    font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 10px 12px;
+    background: var(--ui-bg);
+    color: var(--ui-text);
+    border: none;
+    outline: none;
+    resize: none;
+    width: 100%;
+    min-height: 90px;
+    max-height: 220px;
+    box-sizing: border-box;
+    tab-size: 2;
+}
+
+.db-textarea::placeholder {
+    color: var(--ui-text-muted);
+    opacity: 0.6;
+}
+
+/* ── Results grid ────────────────────────────────────────────────────────────── */
+
+.db-results-wrap {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.db-grid-wrap {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+    min-height: 0;
+}
+
+.db-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    table-layout: auto;
+}
+
+.db-grid-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.db-grid-th {
+    background: var(--ui-surface);
+    padding: 5px 10px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    border-bottom: 1px solid var(--ui-border);
+    border-right: 1px solid var(--ui-border);
+    white-space: nowrap;
+    color: var(--ui-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.db-grid-th:last-child {
+    border-right: none;
+}
+
+.db-grid-row {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.08s;
+}
+
+.db-grid-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.db-grid-row.db-row-even {
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.db-grid-row.db-row-even:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.db-grid-cell {
+    padding: 4px 10px;
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-right: 1px solid rgba(255, 255, 255, 0.04);
+    vertical-align: top;
+    line-height: 1.5;
+}
+
+.db-grid-cell:last-child {
+    border-right: none;
+}
+
+.db-grid-cell.db-cell-null {
+    color: var(--ui-text-muted);
+    font-style: italic;
+}
+
+/* Virtual scroll spacers */
+.db-grid-spacer {
+    pointer-events: none;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────────────── */
+
+.db-status-bar {
+    height: 24px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    gap: 14px;
+    font-size: 11px;
+    color: var(--ui-text-muted);
+    border-top: 1px solid var(--ui-border);
+    background: var(--ui-surface);
+    flex-shrink: 0;
+}
+
+.db-status-bar .db-status-ok  { color: #98c379; }
+.db-status-bar .db-status-err { color: #e06c75; }
+
+.db-results-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ui-text-muted);
+    font-size: 13px;
+}

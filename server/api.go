@@ -27,7 +27,7 @@ var hiddenDirs = map[string]bool{
 }
 
 // RegisterAPIRoutes registers all REST API endpoints.
-func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, configPath string) {
+func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, configPath string, lspMgr *LspServerManager) {
 	// ── GET /healthz ──────────────────────────────────────────────────
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -424,6 +424,55 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, co
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 	})
 
+	// ── GET /api/git/status ───────────────────────────────────────────
+	mux.HandleFunc("GET /api/git/status", func(w http.ResponseWriter, r *http.Request) {
+		cfg.mu.RLock()
+		workspace := cfg.Workspace
+		cfg.mu.RUnlock()
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		// Check if this is a git repo
+		if err := exec.CommandContext(ctx, "git", "-C", workspace, "rev-parse", "--is-inside-work-tree").Run(); err != nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"is_repo": false})
+			return
+		}
+
+		branchOut, _ := exec.CommandContext(ctx, "git", "-C", workspace, "branch", "--show-current").Output()
+		branch := strings.TrimSpace(string(branchOut))
+
+		statusOut, err := exec.CommandContext(ctx, "git", "-C", workspace, "status", "--porcelain=v1", "-u").Output()
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "git status failed"})
+			return
+		}
+
+		type gitFile struct {
+			Path   string `json:"path"`
+			Status string `json:"status"`
+		}
+		var files []gitFile
+		for _, line := range strings.Split(string(statusOut), "\n") {
+			if len(line) < 4 {
+				continue
+			}
+			xy := strings.TrimSpace(line[:2])
+			fp := strings.TrimSpace(line[3:])
+			if strings.Contains(fp, " -> ") {
+				parts := strings.SplitN(fp, " -> ", 2)
+				fp = parts[1]
+			}
+			files = append(files, gitFile{Path: fp, Status: xy})
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"is_repo": true,
+			"branch":  branch,
+			"files":   files,
+		})
+	})
+
 	// ── GET /api/nvim-ready ───────────────────────────────────────────
 	mux.HandleFunc("GET /api/nvim-ready", func(w http.ResponseWriter, r *http.Request) {
 		sockPath := ptyMgr.GetPrimarySocketPath()
@@ -591,6 +640,28 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, co
 			configDir = filepath.Join(homeDir(), ".config", "nvim")
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"configDir": configDir})
+	})
+
+	// ── GET /api/lsp/status ───────────────────────────────────────────
+	mux.HandleFunc("GET /api/lsp/status", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, lspMgr.StatusAll())
+	})
+
+	// ── POST /api/lsp/stop ────────────────────────────────────────────
+	mux.HandleFunc("POST /api/lsp/stop", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Lang string `json:"lang"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Lang == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing lang"})
+			return
+		}
+		if _, ok := LSP_SERVERS[body.Lang]; !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown language"})
+			return
+		}
+		stopped := lspMgr.StopLang(body.Lang)
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "was_running": stopped})
 	})
 }
 

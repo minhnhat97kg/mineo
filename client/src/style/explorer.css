@@ -143,3 +143,15 @@
     background: #c0392b;
     color: #fff;
 }
+
+/* Git status badges */
+.fe-git-badge    { font-size: 10px; margin-left: 4px; font-weight: 700; opacity: 0.85; }
+.fe-git-modified { color: #e5c07b; }
+.fe-git-added    { color: #98c379; }
+.fe-git-deleted  { color: #e06c75; }
+.fe-git-renamed  { color: #c678dd; }
+.fe-git-unknown  { color: #9ca3af; }
+
+/* Keyboard navigation focus */
+.fe-root:focus { outline: none; }
+.fe-entry--focused { background: rgba(255,255,255,0.08); outline: 1px solid #528bff; outline-offset: -1px; }

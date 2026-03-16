@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -40,6 +42,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
+	cfg.Secret = secret
 
 	// ── Validate startup preconditions ────────────────────────────────
 	ValidateStartup(cfg)
@@ -48,10 +51,9 @@ func main() {
 	ptyMgr := NewPtyManager(cfg, appDir)
 
 	// ── WebSocket upgrader (shared) ───────────────────────────────────
+	allowedOrigins := buildAllowedOrigins(cfg.Port)
 	upgrader := &websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
-			return true // Allow all origins (same as the Node server)
-		},
+		CheckOrigin: makeCheckOrigin(allowedOrigins),
 	}
 
 	// ── HTTP mux (Go 1.22+ pattern matching) ──────────────────────────
@@ -60,15 +62,19 @@ func main() {
 	// ── Auth ──────────────────────────────────────────────────────────
 	sessionStore := RegisterAuth(mux, cfg.Password, secret)
 
-	// ── API routes ────────────────────────────────────────────────────
-	RegisterAPIRoutes(mux, cfg, ptyMgr, configPath)
-
 	// ── WebSocket routes ──────────────────────────────────────────────
 	// Wrap WS handlers with auth check
 	RegisterPtyWebSocketsWithAuth(mux, upgrader, ptyMgr, sessionStore)
 	RegisterFileWatchWithAuth(mux, cfg.Workspace, upgrader, sessionStore)
 	lspMgr := NewLspServerManager(upgrader)
 	RegisterLspWithAuth(mux, lspMgr, sessionStore)
+
+	// ── API routes ────────────────────────────────────────────────────
+	// lspMgr must be created first so the API routes can reference it
+	RegisterAPIRoutes(mux, cfg, ptyMgr, configPath, lspMgr)
+
+	// ── Plugin routes ─────────────────────────────────────────────────
+	MountPlugins(mux, cfg)
 
 	// ── Frontend (embedded static files) ──────────────────────────────
 	RegisterFrontend(mux)
@@ -89,6 +95,65 @@ func main() {
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server failed: %v", err)
+	}
+}
+
+// buildAllowedOrigins returns the list of permitted WebSocket origins.
+// It always includes localhost and 127.0.0.1 on the configured port, and
+// any extra origins from the MINEO_ALLOWED_ORIGINS environment variable
+// (comma-separated).
+func buildAllowedOrigins(port int) []string {
+	origins := []string{
+		fmt.Sprintf("http://localhost:%d", port),
+		fmt.Sprintf("http://127.0.0.1:%d", port),
+	}
+	if extra := os.Getenv("MINEO_ALLOWED_ORIGINS"); extra != "" {
+		for _, o := range strings.Split(extra, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				origins = append(origins, o)
+			}
+		}
+	}
+	return origins
+}
+
+// makeCheckOrigin returns a gorilla/websocket CheckOrigin function that only
+// allows same-origin connections. A request is considered same-origin when:
+//   - it has no Origin header (non-browser / curl client), or
+//   - the Origin's host:port matches the request's Host header (standard browser same-origin), or
+//   - the origin appears in the explicit allowedOrigins list (e.g. for reverse-proxy setups).
+//
+// This replaces the previous "return true" catch-all while still working for
+// every normal Mineo deployment (direct browser access, LAN IP, custom domain).
+func makeCheckOrigin(allowedOrigins []string) func(*http.Request) bool {
+	return func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true // non-browser clients (curl, native WS libs, etc.)
+		}
+
+		// Parse origin to extract its host
+		originURL, err := url.Parse(origin)
+		if err != nil {
+			log.Printf("ws: rejected malformed origin %q", origin)
+			return false
+		}
+
+		// Same-origin: origin host matches the Host header the server received
+		// (handles localhost, LAN IPs, custom hostnames, and custom ports transparently)
+		if strings.EqualFold(originURL.Host, r.Host) {
+			return true
+		}
+
+		// Explicit allowlist (env var MINEO_ALLOWED_ORIGINS — for reverse-proxy scenarios)
+		for _, a := range allowedOrigins {
+			if strings.EqualFold(origin, a) {
+				return true
+			}
+		}
+
+		log.Printf("ws: rejected origin %q (host=%q, r.Host=%q)", origin, originURL.Host, r.Host)
+		return false
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +22,15 @@ var LSP_SERVERS = map[string][]string{
 	"python":     {"pylsp"},
 	"go":         {"gopls"},
 	"rust":       {"rust-analyzer"},
+	"lua":        {"lua-language-server", "--stdio"},
+	"bash":       {"bash-language-server", "start"},
+	"css":        {"vscode-css-language-server", "--stdio"},
+	"html":       {"vscode-html-language-server", "--stdio"},
+	"json":       {"vscode-json-language-server", "--stdio"},
+	"yaml":       {"yaml-language-server", "--stdio"},
+	"toml":       {"taplo", "lsp", "stdio"},
+	"c":          {"clangd"},
+	"cpp":        {"clangd"},
 }
 
 const (
@@ -96,6 +106,12 @@ func (lm *LspServerManager) RegisterLspWebSockets(mux *http.ServeMux) {
 		cmd, ok := LSP_SERVERS[lang]
 		if !ok {
 			http.Error(w, "Unknown language server", http.StatusNotFound)
+			return
+		}
+
+		// Check binary exists in PATH before attempting spawn
+		if _, err := exec.LookPath(cmd[0]); err != nil {
+			http.Error(w, fmt.Sprintf("%s language server not installed", lang), http.StatusServiceUnavailable)
 			return
 		}
 
@@ -365,4 +381,58 @@ func (lm *LspServerManager) Stop() {
 			proc.Process.Kill()
 		}
 	}
+}
+
+// LspServerStatus describes a single language server entry.
+type LspServerStatus struct {
+	Lang      string `json:"lang"`
+	Bin       string `json:"bin"`
+	Installed bool   `json:"installed"`
+	Running   bool   `json:"running"`
+}
+
+// StatusAll returns the status of every known language server.
+func (lm *LspServerManager) StatusAll() []LspServerStatus {
+	lm.mu.Lock()
+	running := make(map[string]bool, len(lm.servers))
+	for lang := range lm.servers {
+		running[lang] = true
+	}
+	lm.mu.Unlock()
+
+	// Stable sort order
+	langs := make([]string, 0, len(LSP_SERVERS))
+	for lang := range LSP_SERVERS {
+		langs = append(langs, lang)
+	}
+	sort.Strings(langs)
+
+	result := make([]LspServerStatus, 0, len(langs))
+	for _, lang := range langs {
+		cmd := LSP_SERVERS[lang]
+		_, err := exec.LookPath(cmd[0])
+		result = append(result, LspServerStatus{
+			Lang:      lang,
+			Bin:       cmd[0],
+			Installed: err == nil,
+			Running:   running[lang],
+		})
+	}
+	return result
+}
+
+// StopLang kills the running server for a single language. Returns false if it
+// was not running.
+func (lm *LspServerManager) StopLang(lang string) bool {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+	proc, ok := lm.servers[lang]
+	if !ok {
+		return false
+	}
+	log.Printf("[lsp] stopping %s (user request)", lang)
+	if proc.Process != nil {
+		proc.Process.Kill()
+	}
+	return true
 }

@@ -32,6 +32,10 @@ type MineoCfg struct {
 		ConfigDir  string         `json:"configDir"`
 	} `json:"nvim"`
 
+	// Secret is the hex session secret loaded from .secret at startup.
+	// It is never written to config.json (json:"-").
+	Secret string `json:"-"`
+
 	mu sync.RWMutex // protects hot-reload of workspace/password
 }
 

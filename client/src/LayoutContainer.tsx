@@ -11,6 +11,8 @@ import { getTheme, applyThemeCSS } from './themes';
 import { PtyPane } from './panes/PtyPane';
 import { ComponentType, PANE_ICONS, PANE_TITLES } from './panes/pane-types';
 import { uuid, defaultJson } from './layout-utils';
+import { getPlugin } from './plugins/registry';
+import './plugins/index'; // side-effect: registers all plugins
 
 export interface LayoutContainerHandle {
     addPane(role: ComponentType): void;
@@ -43,9 +45,15 @@ function LayoutContainer({ keyboardLocked }, ref) {
 
     const addPane = useCallback((role: ComponentType) => {
         const id = uuid();
+        let title: string;
+        if (role.startsWith('plugin:')) {
+            title = getPlugin(role.slice(7))?.title ?? role.slice(7);
+        } else {
+            title = PANE_TITLES[role as keyof typeof PANE_TITLES];
+        }
         layoutRef.current?.addTabToActiveTabSet({
             type: 'tab',
-            name: PANE_TITLES[role],
+            name: title,
             component: role,
             config: (role === 'neovim' || role === 'terminal') ? { instanceId: id } : undefined,
             id,
@@ -76,12 +84,30 @@ function LayoutContainer({ keyboardLocked }, ref) {
         if (component === 'settings') {
             return <SettingsPanel />;
         }
+        if (component.startsWith('plugin:')) {
+            const pluginId = component.slice(7);
+            const def = getPlugin(pluginId);
+            if (def) {
+                const PluginComponent = def.component;
+                return <PluginComponent onOpenFile={openFileInNvim} />;
+            }
+            return (
+                <div style={{ padding: 16, color: '#f55', fontFamily: 'monospace' }}>
+                    Plugin not found: "{pluginId}"
+                </div>
+            );
+        }
         return null;
     }, [openFileInNvim, keyboardLocked]);
 
     const onRenderTab = useCallback((node: TabNode, renderValues: { leading: React.ReactNode }) => {
         const component = node.getComponent() as ComponentType;
-        const iconClass = PANE_ICONS[component];
+        let iconClass: string | undefined;
+        if (component.startsWith('plugin:')) {
+            iconClass = getPlugin(component.slice(7))?.iconClass;
+        } else {
+            iconClass = PANE_ICONS[component as keyof typeof PANE_ICONS];
+        }
         if (iconClass) {
             renderValues.leading = <i className={iconClass} style={{ marginRight: 4, fontSize: 13 }} />;
         }

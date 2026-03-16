@@ -2,6 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { settingsStore, MineoSettings } from './settings-store';
 import { THEMES } from './themes';
 
+interface LspEntry {
+    lang: string;
+    bin: string;
+    installed: boolean;
+    running: boolean;
+}
+
 export function SettingsPanel() {
     const [settings, setSettings] = useState<MineoSettings>(settingsStore.get());
     const [workspace, setWorkspace] = useState('');
@@ -9,6 +16,7 @@ export function SettingsPanel() {
     const [configMode, setConfigMode] = useState('system');
     const [configDir, setConfigDir] = useState('');
     const [status, setStatus] = useState<{ msg: string; error?: boolean } | null>(null);
+    const [lspServers, setLspServers] = useState<LspEntry[]>([]);
 
     useEffect(() => {
         return settingsStore.subscribe(setSettings);
@@ -25,6 +33,15 @@ export function SettingsPanel() {
             if (d.configMode) setConfigMode(d.configMode);
             if (d.configDir) setConfigDir(d.configDir);
         }).catch(() => {});
+    }, []);
+
+    // Load + poll LSP status every 3 s so Running badge updates live
+    useEffect(() => {
+        const load = () =>
+            fetch('/api/lsp/status').then(r => r.json()).then((d: LspEntry[]) => setLspServers(d)).catch(() => {});
+        load();
+        const id = setInterval(load, 3000);
+        return () => clearInterval(id);
     }, []);
 
     const flash = useCallback((msg: string, error = false) => {
@@ -56,6 +73,17 @@ export function SettingsPanel() {
             if (r.ok) flash('Saved — restart neovim panes to apply');
             else flash('Failed to save', true);
         }).catch(() => flash('Failed to save', true));
+    };
+
+    const stopLsp = (lang: string) => {
+        fetch('/api/lsp/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lang }),
+        }).then(r => r.json()).then(() => {
+            // optimistically mark as stopped; poll will confirm
+            setLspServers(prev => prev.map(e => e.lang === lang ? { ...e, running: false } : e));
+        }).catch(() => {});
     };
 
     return (
@@ -160,6 +188,47 @@ export function SettingsPanel() {
                         </span>
                     )}
                 </div>
+            </div>
+
+            <div className="sp-section">
+                <div className="sp-section-title">LSP Servers</div>
+                <div className="sp-desc" style={{ marginBottom: 10 }}>
+                    Language servers are started on demand when a client connects via <code>/lsp/&lt;lang&gt;</code>.
+                    Install the binary for a language to enable it.
+                </div>
+                <table className="sp-lsp-table">
+                    <thead>
+                        <tr>
+                            <th>Language</th>
+                            <th>Binary</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {lspServers.map(e => (
+                            <tr key={e.lang}>
+                                <td className="sp-lsp-lang">{e.lang}</td>
+                                <td className="sp-lsp-bin">{e.bin}</td>
+                                <td>
+                                    {e.running
+                                        ? <span className="sp-lsp-badge sp-lsp-running">running</span>
+                                        : e.installed
+                                            ? <span className="sp-lsp-badge sp-lsp-installed">installed</span>
+                                            : <span className="sp-lsp-badge sp-lsp-missing">not installed</span>
+                                    }
+                                </td>
+                                <td>
+                                    {e.running && (
+                                        <button className="sp-btn sp-btn-danger" onClick={() => stopLsp(e.lang)}>
+                                            Stop
+                                        </button>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         </div>
     );

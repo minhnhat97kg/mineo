@@ -3,8 +3,7 @@ import { MenuBar } from './MenuBar';
 import { LayoutContainer, LayoutContainerHandle } from './LayoutContainer';
 import { ReconnectOverlay } from './ReconnectOverlay';
 import { LoginScreen } from './LoginScreen';
-
-type PaneType = 'neovim' | 'terminal' | 'explorer' | 'settings';
+import type { ComponentType } from './panes/pane-types';
 
 // iOS Safari does not support the Fullscreen API at all.
 const supportsFullscreen = !!document.documentElement.requestFullscreen;
@@ -53,7 +52,7 @@ export function App() {
         }
     }, []);
 
-    const handleAddPane = (role: PaneType) => layoutRef.current?.addPane(role);
+    const handleAddPane = (role: ComponentType) => layoutRef.current?.addPane(role);
 
     // Show nothing while probing auth (avoids flash of login screen for authed users)
     if (authState === 'checking') return null;

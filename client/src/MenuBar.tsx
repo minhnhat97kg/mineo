@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { getAllPlugins } from './plugins/registry';
+import type { ComponentType } from './panes/pane-types';
 
-type PaneType = 'neovim' | 'terminal' | 'explorer' | 'settings';
+type PaneType = ComponentType;
 
 interface MenuItem {
     label: string;
@@ -246,6 +248,8 @@ export function MenuBar({ onAddPane, keyboardLocked, onToggleKeyboard, isFullscr
         }).catch(() => alert('Failed to change workspace'));
     }, []);
 
+    const plugins = getAllPlugins();
+
     const menus: MenuDef[] = [
         {
             label: 'File',
@@ -267,6 +271,13 @@ export function MenuBar({ onAddPane, keyboardLocked, onToggleKeyboard, isFullscr
                 { label: isFullscreen ? 'Exit Fullscreen' : 'Fullscreen', action: onToggleFullscreen },
             ],
         },
+        ...(plugins.length > 0 ? [{
+            label: 'Plugins',
+            items: plugins.map(p => ({
+                label: p.title,
+                action: () => onAddPane(`plugin:${p.id}` as PaneType),
+            })),
+        }] : []),
     ];
 
     const handleTrigger = (label: string) => {

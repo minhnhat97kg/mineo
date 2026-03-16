@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -173,6 +174,101 @@ func (am *AuthMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
+// ── Login rate limiting ───────────────────────────────────────────────────────
+
+type loginAttempt struct {
+	count     int
+	windowEnd time.Time
+}
+
+type loginLimiter struct {
+	mu       sync.Mutex
+	attempts map[string]*loginAttempt
+}
+
+var globalLoginLimiter = &loginLimiter{attempts: make(map[string]*loginAttempt)}
+
+const (
+	loginMaxAttempts = 10
+	loginWindow      = 15 * time.Minute
+	loginBanDuration = 30 * time.Minute
+)
+
+// allowed returns true if the IP is not currently rate-limited.
+func (l *loginLimiter) allowed(ip string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	a, ok := l.attempts[ip]
+	if !ok {
+		return true
+	}
+	if time.Now().After(a.windowEnd) {
+		delete(l.attempts, ip)
+		return true
+	}
+	return a.count < loginMaxAttempts
+}
+
+// recordFailure increments the failure count for the IP.
+func (l *loginLimiter) recordFailure(ip string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	a, ok := l.attempts[ip]
+	if !ok || time.Now().After(a.windowEnd) {
+		l.attempts[ip] = &loginAttempt{count: 1, windowEnd: time.Now().Add(loginWindow)}
+		return
+	}
+	a.count++
+	// Once the threshold is hit, extend the window into a ban period
+	if a.count >= loginMaxAttempts {
+		a.windowEnd = time.Now().Add(loginBanDuration)
+	}
+}
+
+// resetIP clears failure records for the IP on successful login.
+func (l *loginLimiter) resetIP(ip string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.attempts, ip)
+}
+
+// startLoginLimiterCleanup starts a background goroutine that periodically
+// removes expired attempt records to prevent unbounded memory growth.
+func startLoginLimiterCleanup() {
+	go func() {
+		for {
+			time.Sleep(1 * time.Hour)
+			globalLoginLimiter.mu.Lock()
+			now := time.Now()
+			for ip, a := range globalLoginLimiter.attempts {
+				if now.After(a.windowEnd) {
+					delete(globalLoginLimiter.attempts, ip)
+				}
+			}
+			globalLoginLimiter.mu.Unlock()
+		}
+	}()
+}
+
+// realIP extracts the real client IP, respecting X-Forwarded-For when the
+// direct connection comes from a loopback address (i.e. a trusted local proxy).
+func realIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	if ip != nil && ip.IsLoopback() {
+		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+			parts := strings.Split(fwd, ",")
+			if candidate := strings.TrimSpace(parts[0]); candidate != "" {
+				return candidate
+			}
+		}
+	}
+	return host
+}
+
 // RegisterAuth sets up /login GET and POST routes on the mux.
 // Returns the session store (needed for WS auth), or nil if no password.
 func RegisterAuth(mux *http.ServeMux, password string, secret string) *SessionStore {
@@ -190,6 +286,9 @@ func RegisterAuth(mux *http.ServeMux, password string, secret string) *SessionSt
 		}
 	}()
 
+	// Periodic login-limiter cleanup
+	startLoginLimiterCleanup()
+
 	// GET /login — serve login form
 	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -203,7 +302,14 @@ func RegisterAuth(mux *http.ServeMux, password string, secret string) *SessionSt
 			return
 		}
 
+		ip := realIP(r)
+		if !globalLoginLimiter.allowed(ip) {
+			http.Error(w, "Too many login attempts — try again later", http.StatusTooManyRequests)
+			return
+		}
+
 		if r.FormValue("password") == password {
+			globalLoginLimiter.resetIP(ip)
 			cookieValue := store.createSession()
 			http.SetCookie(w, &http.Cookie{
 				Name:     sessionCookieName,
@@ -215,6 +321,7 @@ func RegisterAuth(mux *http.ServeMux, password string, secret string) *SessionSt
 			})
 			http.Redirect(w, r, "/", http.StatusFound)
 		} else {
+			globalLoginLimiter.recordFailure(ip)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			fmt.Fprintf(w, loginHTML, `<p class="error">Incorrect password</p>`)
 		}

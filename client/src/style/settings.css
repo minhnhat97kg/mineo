@@ -121,3 +121,52 @@
 .sp-status-error {
     color: #f55;
 }
+
+/* LSP server table */
+.sp-lsp-table {
+    width: 100%;
+    max-width: 520px;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.sp-lsp-table th {
+    text-align: left;
+    color: var(--ui-text-muted, #888);
+    font-weight: 600;
+    font-size: 11px;
+    padding: 4px 8px 6px;
+    border-bottom: 1px solid var(--ui-border, #2a2a3e);
+}
+.sp-lsp-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    vertical-align: middle;
+}
+.sp-lsp-lang {
+    font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+    color: var(--ui-text, #ccc);
+    font-weight: 600;
+}
+.sp-lsp-bin {
+    font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+    color: var(--ui-text-muted, #888);
+    font-size: 11px;
+}
+.sp-lsp-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.3px;
+}
+.sp-lsp-running  { background: rgba(152,195,121,0.15); color: #98c379; }
+.sp-lsp-installed { background: rgba(97,175,239,0.12); color: #61afef; }
+.sp-lsp-missing  { background: rgba(224,108,117,0.12); color: #e06c75; }
+
+.sp-btn-danger {
+    background: #c0392b;
+    font-size: 11px;
+    padding: 3px 10px;
+}
+.sp-btn-danger:hover { opacity: 0.85; }

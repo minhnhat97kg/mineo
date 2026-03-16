@@ -1,0 +1,261 @@
+/* ── Git Log Plugin ──────────────────────────────────────────────────────── */
+
+.gl-root {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+    background: var(--ui-bg, #0d0d17);
+    color: var(--ui-text, #ccc);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+
+.gl-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--ui-border, #2a2a3e);
+    background: var(--ui-surface, #1a1a2e);
+    flex-shrink: 0;
+}
+
+.gl-branch-label {
+    font-size: 11px;
+    color: var(--ui-text-muted, #888);
+    flex-shrink: 0;
+}
+
+.gl-branch-select {
+    background: var(--ui-bg, #0d0d17);
+    border: 1px solid var(--ui-border, #2a2a3e);
+    color: var(--ui-text, #ccc);
+    font-size: 12px;
+    padding: 3px 6px;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+    max-width: 200px;
+}
+.gl-branch-select:focus {
+    border-color: var(--ui-accent, #5865f2);
+}
+
+.gl-refresh-btn {
+    margin-left: auto;
+    background: none;
+    border: 1px solid var(--ui-border, #2a2a3e);
+    color: var(--ui-text-muted, #888);
+    border-radius: 3px;
+    padding: 3px 8px;
+    font-size: 11px;
+    cursor: pointer;
+}
+.gl-refresh-btn:hover {
+    color: var(--ui-text, #ccc);
+    border-color: var(--ui-text-muted, #888);
+}
+
+/* ── Two-column layout ───────────────────────────────────────────────────── */
+
+.gl-sidebar {
+    width: 340px;
+    min-width: 200px;
+    max-width: 50%;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--ui-border, #2a2a3e);
+    flex-shrink: 0;
+}
+
+.gl-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ── Commit list ─────────────────────────────────────────────────────────── */
+
+.gl-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.gl-list::-webkit-scrollbar { width: 6px; }
+.gl-list::-webkit-scrollbar-track { background: transparent; }
+.gl-list::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+.gl-commit {
+    padding: 7px 12px;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+    transition: background 0.08s;
+}
+.gl-commit:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+.gl-commit.gl-selected {
+    background: rgba(88, 101, 242, 0.15);
+    border-left-color: var(--ui-accent, #5865f2);
+}
+
+.gl-commit-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+}
+
+.gl-hash {
+    font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+    font-size: 11px;
+    color: var(--ui-accent, #5865f2);
+    flex-shrink: 0;
+}
+
+.gl-refs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+}
+
+.gl-ref {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.gl-ref-head    { background: rgba(152, 195, 121, 0.18); color: #98c379; }
+.gl-ref-branch  { background: rgba(97, 175, 239, 0.15);  color: #61afef; }
+.gl-ref-remote  { background: rgba(198, 120, 221, 0.15); color: #c678dd; }
+.gl-ref-tag     { background: rgba(229, 192, 123, 0.18); color: #e5c07b; }
+
+.gl-subject {
+    font-size: 12px;
+    color: var(--ui-text, #ccc);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gl-commit-meta {
+    display: flex;
+    gap: 8px;
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--ui-text-muted, #888);
+}
+
+.gl-author {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+}
+
+.gl-date {
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+/* ── Diff viewer ─────────────────────────────────────────────────────────── */
+
+.gl-diff-header {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--ui-border, #2a2a3e);
+    background: var(--ui-surface, #1a1a2e);
+    flex-shrink: 0;
+}
+
+.gl-diff-hash {
+    font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+    font-size: 11px;
+    color: var(--ui-accent, #5865f2);
+    margin-right: 8px;
+}
+
+.gl-diff-subject {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ui-text, #ccc);
+}
+
+.gl-diff-meta {
+    font-size: 11px;
+    color: var(--ui-text-muted, #888);
+    margin-top: 3px;
+}
+
+.gl-diff-body {
+    flex: 1;
+    overflow: auto;
+    padding: 0;
+}
+
+.gl-diff-body::-webkit-scrollbar { width: 6px; height: 6px; }
+.gl-diff-body::-webkit-scrollbar-track { background: transparent; }
+.gl-diff-body::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+.gl-diff-pre {
+    margin: 0;
+    padding: 10px 14px;
+    font-family: 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre;
+    tab-size: 4;
+}
+
+.gl-diff-line-add {
+    display: block;
+    background: rgba(152, 195, 121, 0.10);
+    color: #98c379;
+}
+.gl-diff-line-del {
+    display: block;
+    background: rgba(224, 108, 117, 0.10);
+    color: #e06c75;
+}
+.gl-diff-line-hunk {
+    display: block;
+    color: #61afef;
+    opacity: 0.75;
+}
+.gl-diff-line-file {
+    display: block;
+    color: var(--ui-text-muted, #888);
+    font-weight: 600;
+    padding-top: 6px;
+}
+
+/* ── Empty / loading states ──────────────────────────────────────────────── */
+
+.gl-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--ui-text-muted, #888);
+    font-size: 13px;
+    text-align: center;
+    padding: 24px;
+}
+
+.gl-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--ui-text-muted, #888);
+    font-size: 13px;
+}

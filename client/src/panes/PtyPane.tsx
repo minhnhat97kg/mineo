@@ -51,6 +51,7 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef, keyb
             fontFamily: currentSettings.fontFamily,
             fontSize: currentSettings.fontSize,
             theme: toXtermTheme(currentTheme),
+            scrollback: 5000,  // cap at 5,000 lines to prevent unbounded memory growth
         });
         const fitAddon = new FitAddon();
         const unicode11 = new Unicode11Addon();
@@ -127,9 +128,14 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef, keyb
                 term.write(e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : enc.encode(e.data));
                 if (!revealed) { revealed = true; el.style.opacity = '1'; }
             });
-            dws.addEventListener('close', () => {
+            dws.addEventListener('close', (event) => {
                 dwsRef.current = null;
-                term.write('\r\n\x1b[31m[disconnected]\x1b[0m\r\n');
+                const reason = event.reason
+                    ? ` (${event.reason})`
+                    : event.code !== 1000 && event.code !== 1001
+                        ? ` (code ${event.code})`
+                        : '';
+                term.write(`\r\n\x1b[31m[disconnected${reason}]\x1b[0m\r\n`);
                 if (!disposed) window.dispatchEvent(new CustomEvent('mineo:disconnected'));
             });
             dws.addEventListener('error', () => {

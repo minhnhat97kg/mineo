@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getFileIcon, getOpenFolderIcon } from './file-icons';
 import { useLongPress } from './use-long-press';
+import { useGitStatus, GitStatusMap } from './hooks/useGitStatus';
 
 interface FileEntry {
     name: string;
@@ -18,6 +19,7 @@ interface TreeNode extends FileEntry {
 interface Props {
     rootDir?: string;
     onOpenFile: (filePath: string) => void;
+    gitStatusMap?: GitStatusMap;
 }
 
 interface ContextMenuState {
@@ -192,6 +194,8 @@ function TreeEntry({
     inlineInput,
     onInlineSubmit,
     onInlineCancel,
+    gitStatusMap,
+    focusedPath,
 }: {
     node: TreeNode;
     depth: number;
@@ -201,12 +205,28 @@ function TreeEntry({
     inlineInput: InlineInputState | null;
     onInlineSubmit: (value: string) => void;
     onInlineCancel: () => void;
+    gitStatusMap?: GitStatusMap;
+    focusedPath?: string | null;
 }) {
     const icon = node.isDirectory
         ? (node.expanded ? getOpenFolderIcon() : getFileIcon(undefined, true))
         : getFileIcon(node.extension, false, node.name);
 
     const isRenaming = inlineInput?.kind === 'rename' && inlineInput.existingPath === node.path;
+    const isFocused = focusedPath === node.path;
+
+    // Derive the workspace-relative path for git status lookup.
+    // gitStatusMap keys are relative to the workspace root (e.g. "src/foo.ts").
+    const gitStatus = (() => {
+        if (!gitStatusMap || gitStatusMap.size === 0) return undefined;
+        for (const [rel] of gitStatusMap) {
+            // node.path is absolute; try to find a key that the absolute path ends with
+            if (node.path.endsWith('/' + rel) || node.path === rel) {
+                return gitStatusMap.get(rel);
+            }
+        }
+        return undefined;
+    })();
 
     const entryRef = useRef<HTMLDivElement>(null);
 
@@ -255,10 +275,11 @@ function TreeEntry({
         <>
             <div
                 ref={entryRef}
-                className={`fe-entry ${node.isDirectory ? 'fe-dir' : ''}`}
+                className={`fe-entry ${node.isDirectory ? 'fe-dir' : ''} ${isFocused ? 'fe-entry--focused' : ''}`}
                 style={{ paddingLeft: depth * 16 + 8 }}
                 onClick={handleClick}
                 onContextMenu={handleContextMenu}
+                aria-selected={isFocused}
             >
                 <span className="fe-icon" style={icon.deviconClass ? undefined : { color: icon.color }}>
                     {icon.deviconClass
@@ -267,6 +288,11 @@ function TreeEntry({
                     }
                 </span>
                 <span className="fe-name">{node.name}</span>
+                {gitStatus && (
+                    <span className={`fe-git-badge fe-git-${gitBadgeClass(gitStatus)}`}>
+                        {gitBadgeLabel(gitStatus)}
+                    </span>
+                )}
             </div>
             {node.expanded && node.loading && (
                 <div className="fe-loading" style={{ paddingLeft: (depth + 1) * 16 + 8 }}>
@@ -292,6 +318,8 @@ function TreeEntry({
                     inlineInput={inlineInput}
                     onInlineSubmit={onInlineSubmit}
                     onInlineCancel={onInlineCancel}
+                    gitStatusMap={gitStatusMap}
+                    focusedPath={focusedPath}
                 />
             ))}
         </>
@@ -300,6 +328,19 @@ function TreeEntry({
 
 // ── Main component ──
 
+function gitBadgeClass(xy: string): string {
+    if (xy.includes('M')) return 'modified';
+    if (xy.includes('A') || xy === '??') return 'added';
+    if (xy.includes('D')) return 'deleted';
+    if (xy.includes('R')) return 'renamed';
+    return 'unknown';
+}
+
+function gitBadgeLabel(xy: string): string {
+    if (xy === '??') return '?';
+    return xy.trim()[0] ?? '';
+}
+
 export function FileExplorer({ rootDir, onOpenFile }: Props) {
     const [nodes, setNodes] = useState<TreeNode[]>([]);
     const [error, setError] = useState<string | null>(null);
@@ -307,6 +348,12 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
     const [inlineInput, setInlineInput] = useState<InlineInputState | null>(null);
     const rootDirRef = useRef<string | undefined>(rootDir);
     const uploadInputRef = useRef<HTMLInputElement>(null);
+
+    // Git status polling
+    const { statusMap: gitStatusMap } = useGitStatus();
+
+    // Keyboard navigation state
+    const [focusedPath, setFocusedPath] = useState<string | null>(null);
 
     // Load root directory
     const loadRoot = useCallback(() => {
@@ -487,6 +534,40 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
             });
     }, [refreshDir]);
 
+    // Keyboard navigation
+    const handleKeyboardNav = useCallback((e: React.KeyboardEvent) => {
+        const flat = flattenVisible(nodes);
+        if (flat.length === 0) return;
+        const idx = focusedPath ? flat.findIndex(n => n.path === focusedPath) : -1;
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setFocusedPath(flat[Math.min(idx + 1, flat.length - 1)].path);
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setFocusedPath(flat[Math.max(idx - 1, 0)].path);
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                if (idx >= 0 && flat[idx].isDirectory && !flat[idx].expanded) toggleNode(flat[idx]);
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                if (idx >= 0 && flat[idx].isDirectory && flat[idx].expanded) toggleNode(flat[idx]);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (idx >= 0) {
+                    const n = flat[idx];
+                    if (n.isDirectory) toggleNode(n);
+                    else onOpenFile(n.path);
+                }
+                break;
+        }
+    }, [nodes, focusedPath, toggleNode, onOpenFile]);
+
     // Right-click on empty area = new file/folder at root
     const handleRootContextMenu = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -527,7 +608,9 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
         <div
             ref={rootRef}
             className="fe-root"
+            tabIndex={0}
             onContextMenu={handleRootContextMenu}
+            onKeyDown={handleKeyboardNav}
         >
             {/* Hidden file input for uploads */}
             <input
@@ -556,6 +639,8 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
                     inlineInput={inlineInput}
                     onInlineSubmit={handleInlineSubmit}
                     onInlineCancel={handleInlineCancel}
+                    gitStatusMap={gitStatusMap}
+                    focusedPath={focusedPath}
                 />
             ))}
             {contextMenu && (
@@ -572,6 +657,18 @@ export function FileExplorer({ rootDir, onOpenFile }: Props) {
 }
 
 // ── Tree helpers ──
+
+/** Returns all currently visible (expanded) nodes in depth-first order. */
+function flattenVisible(nodes: TreeNode[]): TreeNode[] {
+    const result: TreeNode[] = [];
+    for (const n of nodes) {
+        result.push(n);
+        if (n.isDirectory && n.expanded && n.children) {
+            result.push(...flattenVisible(n.children));
+        }
+    }
+    return result;
+}
 
 function updateNode(nodes: TreeNode[], targetPath: string, patch: Partial<TreeNode>): TreeNode[] {
     return nodes.map(n => {

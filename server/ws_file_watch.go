@@ -23,6 +23,8 @@ type FileWatcher struct {
 	watcher   *fsnotify.Watcher
 }
 
+const maxFileWatchClients = 50
+
 // NewFileWatcher creates a new file watcher for the given workspace.
 func NewFileWatcher(workspace string, upgrader *websocket.Upgrader) *FileWatcher {
 	return &FileWatcher{
@@ -142,6 +144,14 @@ func (fw *FileWatcher) broadcast(dir string) {
 
 // ServeHTTP handles the WebSocket upgrade for /services/file-watch.
 func (fw *FileWatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fw.clientsMu.Lock()
+	if len(fw.clients) >= maxFileWatchClients {
+		fw.clientsMu.Unlock()
+		http.Error(w, "too many watchers", http.StatusServiceUnavailable)
+		return
+	}
+	fw.clientsMu.Unlock()
+
 	conn, err := fw.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("[file-watch] upgrade failed: %v", err)

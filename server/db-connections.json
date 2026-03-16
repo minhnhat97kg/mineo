@@ -1,0 +1,22 @@
+{
+  "connections": [
+    {
+      "id": "4e3a6e7a-235d-c832-5241-c222a21db139",
+      "label": "Test",
+      "driver": "postgres",
+      "method": "ssh-key",
+      "host": "rhaegal.cluster-c1gplrml8j1m.ap-southeast-1.rds.amazonaws.com",
+      "port": 5432,
+      "database": "jppass_dev",
+      "user": "jppass_dev",
+      "sslMode": "disable",
+      "filePath": "",
+      "sshHost": "52.77.121.64",
+      "sshPort": 22,
+      "sshUser": "jumper",
+      "sshKeyPath": "/Users/nhath/.ssh/buuuk_machine",
+      "createdAt": "2026-03-16T16:02:26.663998Z",
+      "updatedAt": "2026-03-16T16:02:26.663998Z"
+    }
+  ]
+}
