@@ -1,4 +1,4 @@
-module mineo/server-go
+module mineo/server
 
 go 1.25.3
 
