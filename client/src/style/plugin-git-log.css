@@ -1,72 +1,82 @@
-/* ── Git Log Plugin ──────────────────────────────────────────────────────── */
+/* ── Git Log Plugin — compact shadcn dark ── */
 
 .gl-root {
     display: flex;
     height: 100%;
     overflow: hidden;
-    background: var(--ui-bg, #0d0d17);
-    color: var(--ui-text, #ccc);
+    background: var(--ui-bg, #121212);
+    color: var(--ui-text, #e5e7eb);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 13px;
+    font-size: 11px;
 }
 
-/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+/* ── Toolbar — 24px ── */
 
 .gl-toolbar {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    border-bottom: 1px solid var(--ui-border, #2a2a3e);
-    background: var(--ui-surface, #1a1a2e);
+    gap: 4px;
+    padding: 0 8px;
+    height: 24px;
+    border-bottom: 1px solid var(--ui-border, #2a2a2a);
+    background: var(--ui-surface, #1e1e1e);
     flex-shrink: 0;
 }
 
 .gl-branch-label {
-    font-size: 11px;
-    color: var(--ui-text-muted, #888);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ui-text-muted, #9ca3af);
     flex-shrink: 0;
 }
 
 .gl-branch-select {
-    background: var(--ui-bg, #0d0d17);
-    border: 1px solid var(--ui-border, #2a2a3e);
-    color: var(--ui-text, #ccc);
-    font-size: 12px;
-    padding: 3px 6px;
+    background: var(--ui-bg, #121212);
+    border: 1px solid var(--ui-border, #2a2a2a);
+    color: var(--ui-text, #e5e7eb);
+    font-size: 10px;
+    padding: 0 18px 0 5px;
+    height: 18px;
     border-radius: 3px;
     outline: none;
     cursor: pointer;
-    max-width: 200px;
+    max-width: 180px;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24'%3E%3Cpath fill='%239ca3af' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    transition: border-color 0.12s;
 }
-.gl-branch-select:focus {
-    border-color: var(--ui-accent, #5865f2);
-}
+.gl-branch-select:focus { border-color: var(--ui-accent, #60a5fa); }
 
 .gl-refresh-btn {
     margin-left: auto;
     background: none;
-    border: 1px solid var(--ui-border, #2a2a3e);
-    color: var(--ui-text-muted, #888);
+    border: 1px solid transparent;
+    color: var(--ui-text-muted, #9ca3af);
     border-radius: 3px;
-    padding: 3px 8px;
-    font-size: 11px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
     cursor: pointer;
+    transition: background 0.08s, color 0.08s;
 }
-.gl-refresh-btn:hover {
-    color: var(--ui-text, #ccc);
-    border-color: var(--ui-text-muted, #888);
-}
+.gl-refresh-btn:hover { background: rgba(255,255,255,0.05); color: var(--ui-text, #e5e7eb); }
 
-/* ── Two-column layout ───────────────────────────────────────────────────── */
+/* ── Two-column layout ── */
 
 .gl-sidebar {
-    width: 340px;
-    min-width: 200px;
+    width: 300px;
+    min-width: 180px;
     max-width: 50%;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid var(--ui-border, #2a2a3e);
+    border-right: 1px solid var(--ui-border, #2a2a2a);
     flex-shrink: 0;
 }
 
@@ -75,74 +85,73 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-width: 0;
 }
 
-/* ── Commit list ─────────────────────────────────────────────────────────── */
+/* ── Commit list ── */
 
 .gl-list {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
-    padding: 4px 0;
+    padding: 2px 0;
 }
 
-.gl-list::-webkit-scrollbar { width: 6px; }
+.gl-list::-webkit-scrollbar       { width: 3px; }
 .gl-list::-webkit-scrollbar-track { background: transparent; }
-.gl-list::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+.gl-list::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 99px; }
 
 .gl-commit {
-    padding: 7px 12px;
+    padding: 4px 8px;
     cursor: pointer;
     border-left: 2px solid transparent;
-    transition: background 0.08s;
+    transition: background 0.07s;
 }
-.gl-commit:hover {
-    background: rgba(255, 255, 255, 0.04);
-}
+.gl-commit:hover { background: rgba(255,255,255,0.03); }
 .gl-commit.gl-selected {
-    background: rgba(88, 101, 242, 0.15);
-    border-left-color: var(--ui-accent, #5865f2);
+    background: rgba(96,165,250,0.10);
+    border-left-color: var(--ui-accent, #60a5fa);
 }
 
 .gl-commit-top {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 3px;
+    gap: 4px;
+    margin-bottom: 1px;
 }
 
 .gl-hash {
-    font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
-    font-size: 11px;
-    color: var(--ui-accent, #5865f2);
+    font-family: 'JetBrains Mono', Menlo, monospace;
+    font-size: 10px;
+    color: var(--ui-accent, #60a5fa);
     flex-shrink: 0;
 }
 
-.gl-refs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 3px;
-    flex: 1;
-    min-width: 0;
-}
+.gl-refs { display: flex; flex-wrap: wrap; gap: 2px; flex: 1; min-width: 0; }
 
 .gl-ref {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 1px 5px;
+    display: inline-flex;
+    align-items: center;
+    height: 14px;
+    padding: 0 4px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
     border-radius: 3px;
     white-space: nowrap;
-    max-width: 120px;
+    max-width: 110px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.gl-ref-head    { background: rgba(152, 195, 121, 0.18); color: #98c379; }
-.gl-ref-branch  { background: rgba(97, 175, 239, 0.15);  color: #61afef; }
-.gl-ref-remote  { background: rgba(198, 120, 221, 0.15); color: #c678dd; }
-.gl-ref-tag     { background: rgba(229, 192, 123, 0.18); color: #e5c07b; }
+.gl-ref-head   { background: rgba(74,222,128,0.12); color: #4ade80; }
+.gl-ref-branch { background: rgba(96,165,250,0.10); color: #60a5fa; }
+.gl-ref-remote { background: rgba(192,132,252,0.10); color: #c084fc; }
+.gl-ref-tag    { background: rgba(251,191,36,0.12); color: #fbbf24; }
 
 .gl-subject {
-    font-size: 12px;
-    color: var(--ui-text, #ccc);
+    font-size: 11px;
+    color: var(--ui-text, #e5e7eb);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -150,105 +159,80 @@
 
 .gl-commit-meta {
     display: flex;
-    gap: 8px;
-    margin-top: 2px;
-    font-size: 11px;
-    color: var(--ui-text-muted, #888);
+    gap: 6px;
+    margin-top: 1px;
+    font-size: 10px;
+    color: var(--ui-text-muted, #9ca3af);
 }
 
-.gl-author {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 140px;
-}
+.gl-author { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+.gl-date   { flex-shrink: 0; margin-left: auto; }
 
-.gl-date {
-    flex-shrink: 0;
-    margin-left: auto;
-}
-
-/* ── Diff viewer ─────────────────────────────────────────────────────────── */
+/* ── Diff viewer ── */
 
 .gl-diff-header {
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--ui-border, #2a2a3e);
-    background: var(--ui-surface, #1a1a2e);
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--ui-border, #2a2a2a);
+    background: var(--ui-surface, #1e1e1e);
     flex-shrink: 0;
 }
 
 .gl-diff-hash {
-    font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
-    font-size: 11px;
-    color: var(--ui-accent, #5865f2);
-    margin-right: 8px;
+    font-family: 'JetBrains Mono', Menlo, monospace;
+    font-size: 10px;
+    color: var(--ui-accent, #60a5fa);
+    margin-right: 6px;
 }
 
 .gl-diff-subject {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--ui-text, #ccc);
+    color: var(--ui-text, #e5e7eb);
 }
 
 .gl-diff-meta {
-    font-size: 11px;
-    color: var(--ui-text-muted, #888);
-    margin-top: 3px;
+    font-size: 10px;
+    color: var(--ui-text-muted, #9ca3af);
+    margin-top: 2px;
 }
 
 .gl-diff-body {
     flex: 1;
+    min-height: 0;
     overflow: auto;
     padding: 0;
 }
 
-.gl-diff-body::-webkit-scrollbar { width: 6px; height: 6px; }
+.gl-diff-body::-webkit-scrollbar       { width: 3px; height: 3px; }
 .gl-diff-body::-webkit-scrollbar-track { background: transparent; }
-.gl-diff-body::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+.gl-diff-body::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 99px; }
 
 .gl-diff-pre {
     margin: 0;
-    padding: 10px 14px;
-    font-family: 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
-    font-size: 12px;
-    line-height: 1.6;
+    padding: 6px 10px;
+    font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+    font-size: 11px;
+    line-height: 1.5;
     white-space: pre;
     tab-size: 4;
 }
 
-.gl-diff-line-add {
-    display: block;
-    background: rgba(152, 195, 121, 0.10);
-    color: #98c379;
-}
-.gl-diff-line-del {
-    display: block;
-    background: rgba(224, 108, 117, 0.10);
-    color: #e06c75;
-}
-.gl-diff-line-hunk {
-    display: block;
-    color: #61afef;
-    opacity: 0.75;
-}
-.gl-diff-line-file {
-    display: block;
-    color: var(--ui-text-muted, #888);
-    font-weight: 600;
-    padding-top: 6px;
-}
+.gl-diff-line-add  { display: block; background: rgba(74,222,128,0.08); color: #4ade80; }
+.gl-diff-line-del  { display: block; background: rgba(248,113,113,0.08); color: #f87171; }
+.gl-diff-line-hunk { display: block; color: var(--ui-accent, #60a5fa); opacity: 0.7; }
+.gl-diff-line-file { display: block; color: var(--ui-text-muted, #9ca3af); font-weight: 600; padding-top: 4px; }
 
-/* ── Empty / loading states ──────────────────────────────────────────────── */
+/* ── Empty / loading ── */
 
 .gl-empty {
     display: flex;
     align-items: center;
     justify-content: center;
     height: 100%;
-    color: var(--ui-text-muted, #888);
-    font-size: 13px;
+    color: var(--ui-text-muted, #9ca3af);
+    font-size: 11px;
     text-align: center;
-    padding: 24px;
+    padding: 16px;
 }
 
 .gl-placeholder {
@@ -256,6 +240,6 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    color: var(--ui-text-muted, #888);
-    font-size: 13px;
+    color: var(--ui-text-muted, #9ca3af);
+    font-size: 11px;
 }

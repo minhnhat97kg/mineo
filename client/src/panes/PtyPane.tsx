@@ -60,6 +60,7 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef, keyb
         term.unicode.activeVersion = '11';
         term.open(el);
         termRef.current = term;
+        termMapRef.current.set(instanceId, { term, fitAddon });
         // Apply initial keyboard lock state to the textarea xterm just created
         const textarea = el.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
         if (textarea) textarea.readOnly = keyboardLocked;
@@ -70,10 +71,6 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef, keyb
             lastFocusedNvimRef.current = instanceId;
             term.onData(() => { lastFocusedNvimRef.current = instanceId; });
         }
-
-        // Long-press (500 ms) on touch devices to open the native context menu.
-        // The global suppresser in main.tsx skips .xterm elements, so the
-        // browser's built-in long-press fires naturally — nothing to wire up here.
 
         const unsubSettings = settingsStore.subscribe(s => {
             const entry = termMapRef.current.get(instanceId);
@@ -112,7 +109,18 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef, keyb
         const spawnCols = term.cols > 0 ? term.cols : 120;
         const spawnRows = term.rows > 0 ? term.rows : 30;
 
-        ptyControlService.spawn({ instanceId, role, cols: spawnCols, rows: spawnRows, cwd: cwd() }).then(() => {
+        // Check if the window already exists in tmux (reconnect scenario)
+        async function connect() {
+            const windows = await ptyControlService.list();
+            const exists = windows.some(w => w.id === instanceId);
+
+            if (!exists) {
+                // Fresh window — spawn it
+                await ptyControlService.spawn({ instanceId, role, cols: spawnCols, rows: spawnRows, cwd: cwd() });
+            }
+            // else: window already exists in tmux, just attach the WebSocket
+            // Scrollback is sent by server automatically on data WS open
+
             if (disposed) return;
 
             const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -123,10 +131,8 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef, keyb
             dataWs = dws;
             dwsRef.current = dws;
             dws.binaryType = 'arraybuffer';
-            let revealed = false;
             dws.addEventListener('message', e => {
                 term.write(e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : enc.encode(e.data));
-                if (!revealed) { revealed = true; el.style.opacity = '1'; }
             });
             dws.addEventListener('close', (event) => {
                 dwsRef.current = null;
@@ -157,7 +163,9 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef, keyb
                 fitAndResize();
                 setTimeout(() => { fitAndResize(); term.focus(); }, 50);
             });
-        });
+        }
+
+        connect();
 
         return () => {
             disposed = true;
@@ -169,17 +177,16 @@ export function PtyPane({ instanceId, role, termMapRef, lastFocusedNvimRef, keyb
             termRef.current = null;
             termMapRef.current.delete(instanceId);
             unsubSettings();
-            ptyControlService.kill(instanceId);
+            // DO NOT kill — tmux window stays alive.
+            // Kill is handled by LayoutContainer's onAction when a tab is closed.
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // neovim: start invisible so the green startup flash is never shown;
-    // revealed on first data (see revealOnFirstData below)
-    const initialOpacity = role === 'neovim' ? 0 : 1;
+    // No opacity hack — tmux attach is instant since the process is already running
     return (
         <>
-            <div ref={elRef} style={{ width: '100%', height: '100%', opacity: initialOpacity, transition: 'opacity 0.15s' }} />
+            <div ref={elRef} style={{ width: '100%', height: '100%' }} />
             {createPortal(<TermContextMenu state={menu} onClose={close} />, document.body)}
         </>
     );

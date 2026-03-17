@@ -1,7 +1,7 @@
 import {
     useEffect, useRef, useCallback, forwardRef, useImperativeHandle, useState,
 } from 'react';
-import { Layout, Model, TabNode } from 'flexlayout-react';
+import { Actions, Layout, Model, TabNode, Action } from 'flexlayout-react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { FileExplorer } from './FileExplorer';
@@ -10,7 +10,8 @@ import { settingsStore } from './settings-store';
 import { getTheme, applyThemeCSS } from './themes';
 import { PtyPane } from './panes/PtyPane';
 import { ComponentType, PANE_ICONS, PANE_TITLES } from './panes/pane-types';
-import { uuid, defaultJson } from './layout-utils';
+import { uuid, defaultJson, buildFromWindows, validateLayout } from './layout-utils';
+import { ptyControlService } from './pty-control-service';
 import { getPlugin } from './plugins/registry';
 import './plugins/index'; // side-effect: registers all plugins
 
@@ -25,8 +26,53 @@ function LayoutContainer({ keyboardLocked }, ref) {
     const layoutRef = useRef<Layout>(null);
     const lastFocusedNvimRef = useRef<string | null>(null);
     const termMapRef = useRef<Map<string, { term: Terminal; fitAddon: FitAddon }>>(new Map());
+    const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const [model] = useState<Model>(() => Model.fromJson(defaultJson()));
+    const [model, setModel] = useState<Model | null>(null);
+
+    // On mount: restore layout from server or build from existing tmux windows
+    useEffect(() => {
+        let cancelled = false;
+
+        async function init() {
+            try {
+                // 1. Try to load saved layout from server
+                const layoutRes = await fetch('/api/session/layout');
+                const { layout: savedLayout } = await layoutRes.json();
+
+                // 2. Get current tmux windows
+                const windows = await ptyControlService.list();
+
+                if (cancelled) return;
+
+                if (savedLayout && windows.length > 0) {
+                    // Saved layout exists AND tmux windows exist → restore & validate
+                    const validated = validateLayout(savedLayout, windows);
+                    if (validated) {
+                        setModel(Model.fromJson(validated));
+                        return;
+                    }
+                }
+
+                if (windows.length > 0) {
+                    // Tmux windows exist but no saved layout → build flat tabs
+                    setModel(Model.fromJson(buildFromWindows(windows)));
+                    return;
+                }
+
+                // Fresh start — use default layout (new tmux windows will be created)
+                setModel(Model.fromJson(defaultJson()));
+            } catch {
+                // On any error, fall back to default
+                if (!cancelled) {
+                    setModel(Model.fromJson(defaultJson()));
+                }
+            }
+        }
+
+        init();
+        return () => { cancelled = true; };
+    }, []);
 
     useEffect(() => {
         applyThemeCSS(getTheme(settingsStore.get().theme));
@@ -35,6 +81,19 @@ function LayoutContainer({ keyboardLocked }, ref) {
         });
         return unsub;
     }, []);
+
+    // Persist layout to server (debounced)
+    const persistLayout = useCallback(() => {
+        if (!model) return;
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => {
+            fetch('/api/session/layout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ layout: model.toJson() }),
+            }).catch(() => {});
+        }, 500);
+    }, [model]);
 
     const openFileInNvim = useCallback((filePath: string) => {
         const instanceId = lastFocusedNvimRef.current;
@@ -61,6 +120,21 @@ function LayoutContainer({ keyboardLocked }, ref) {
     }, []);
 
     useImperativeHandle(ref, () => ({ addPane }));
+
+    // Handle tab close → kill the tmux window
+    const onAction = useCallback((action: Action) => {
+        if (action.type === Actions.DELETE_TAB && model) {
+            const node = model.getNodeById(action.data.node);
+            if (node && node instanceof TabNode) {
+                const config = node.getConfig() as { instanceId?: string } | undefined;
+                const component = node.getComponent();
+                if ((component === 'neovim' || component === 'terminal') && config?.instanceId) {
+                    ptyControlService.kill(config.instanceId);
+                }
+            }
+        }
+        return action; // allow default handling
+    }, [model]);
 
     const factory = useCallback((node: TabNode) => {
         const component = node.getComponent() as ComponentType;
@@ -113,12 +187,23 @@ function LayoutContainer({ keyboardLocked }, ref) {
         }
     }, []);
 
+    // Don't render until model is loaded
+    if (!model) {
+        return (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
+                Loading...
+            </div>
+        );
+    }
+
     return (
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
             <Layout
                 ref={layoutRef}
                 model={model}
                 factory={factory}
+                onAction={onAction}
+                onModelChange={persistLayout}
                 onRenderTab={onRenderTab}
                 icons={{
                     close: (

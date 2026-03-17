@@ -10,6 +10,12 @@ export interface SpawnOptions {
     cwd?: string;
 }
 
+export interface WindowInfo {
+    id: string;
+    role: PaneRole;
+    attached: boolean;
+}
+
 class PtyControlService {
     private ws: WebSocket | null = null;
     private queue: string[] = [];
@@ -70,7 +76,22 @@ class PtyControlService {
         });
     }
 
+    /** Kill a window (destroy tmux window + process) */
     kill(instanceId: string): void { this.send({ type: 'kill', instanceId }); }
+
+    /** Detach a window (disconnect but keep alive in tmux) */
+    detach(instanceId: string): void { this.send({ type: 'detach', instanceId }); }
+
+    /** List all tmux windows in the session */
+    async list(): Promise<WindowInfo[]> {
+        try {
+            const res = await fetch('/api/session/windows');
+            const data = await res.json();
+            return data.windows ?? [];
+        } catch {
+            return [];
+        }
+    }
 }
 
 export const ptyControlService = new PtyControlService();

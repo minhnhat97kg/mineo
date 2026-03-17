@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/gorilla/websocket"
 )
@@ -47,8 +49,8 @@ func main() {
 	// ── Validate startup preconditions ────────────────────────────────
 	ValidateStartup(cfg)
 
-	// ── Create PTY manager ────────────────────────────────────────────
-	ptyMgr := NewPtyManager(cfg, appDir)
+	// ── Create Tmux manager (replaces PTY manager) ─────────────────
+	tmuxMgr := NewTmuxManager(cfg, appDir)
 
 	// ── WebSocket upgrader (shared) ───────────────────────────────────
 	allowedOrigins := buildAllowedOrigins(cfg.Port)
@@ -64,14 +66,14 @@ func main() {
 
 	// ── WebSocket routes ──────────────────────────────────────────────
 	// Wrap WS handlers with auth check
-	RegisterPtyWebSocketsWithAuth(mux, upgrader, ptyMgr, sessionStore)
+	RegisterPtyWebSocketsWithAuth(mux, upgrader, tmuxMgr, sessionStore)
 	RegisterFileWatchWithAuth(mux, cfg.Workspace, upgrader, sessionStore)
 	lspMgr := NewLspServerManager(upgrader)
 	RegisterLspWithAuth(mux, lspMgr, sessionStore)
 
 	// ── API routes ────────────────────────────────────────────────────
 	// lspMgr must be created first so the API routes can reference it
-	RegisterAPIRoutes(mux, cfg, ptyMgr, configPath, lspMgr)
+	RegisterAPIRoutes(mux, cfg, tmuxMgr, configPath, lspMgr)
 
 	// ── Plugin routes ─────────────────────────────────────────────────
 	MountPlugins(mux, cfg)
@@ -89,6 +91,17 @@ func main() {
 		Addr:    addr,
 		Handler: handler,
 	}
+
+	// ── Graceful shutdown ─────────────────────────────────────────────
+	// On SIGINT/SIGTERM: detach all windows (tmux session stays alive)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		log.Println("[shutdown] Detaching all tmux windows (session stays alive)...")
+		tmuxMgr.DetachAll()
+		server.Close()
+	}()
 
 	log.Printf("Mineo running at http://%s", addr)
 	log.Printf("Workspace: %s", cfg.Workspace)
@@ -158,9 +171,9 @@ func makeCheckOrigin(allowedOrigins []string) func(*http.Request) bool {
 }
 
 // RegisterPtyWebSocketsWithAuth wraps PTY WebSocket handlers with auth gating.
-func RegisterPtyWebSocketsWithAuth(mux *http.ServeMux, upgrader *websocket.Upgrader, ptyMgr *PtyManager, store *SessionStore) {
+func RegisterPtyWebSocketsWithAuth(mux *http.ServeMux, upgrader *websocket.Upgrader, tmuxMgr *TmuxManager, store *SessionStore) {
 	innerMux := http.NewServeMux()
-	RegisterPtyWebSockets(innerMux, upgrader, ptyMgr)
+	RegisterPtyWebSockets(innerMux, upgrader, tmuxMgr)
 
 	// Re-register each path on the outer mux with auth check
 	wsAuthWrap := func(pattern string) {

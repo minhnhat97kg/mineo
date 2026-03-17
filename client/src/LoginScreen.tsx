@@ -27,14 +27,10 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: body.toString(),
-                redirect: 'manual', // don't follow redirect — detect success ourselves
+                redirect: 'manual',
             });
 
-            // Server redirects to "/" on success, stays on /login on failure.
-            // With redirect:'manual', a redirect comes back as opaqueredirect (type=opaqueredirect).
-            // We check for a 302 (opaqueredirect) or a 200 to /login (wrong password).
             if (res.type === 'opaqueredirect' || res.ok) {
-                // Verify we actually have a valid session now
                 const check = await fetch('/api/files', { cache: 'no-store' });
                 if (check.ok) {
                     onSuccess();
@@ -52,32 +48,34 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
     return (
         <div style={{
             position: 'fixed', inset: 0,
-            background: '#121212',
+            background: 'var(--pane-bg, #121212)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         }}>
             <form
                 onSubmit={submit}
                 style={{
-                    background: '#1e1e1e',
-                    border: '1px solid #333',
-                    borderRadius: 12,
-                    padding: '36px 40px',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20,
-                    minWidth: 300,
-                    boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
+                    background: 'var(--ui-surface, #1e1e1e)',
+                    border: '1px solid var(--ui-border, #2a2a2a)',
+                    borderRadius: 8,
+                    padding: '24px 28px',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
+                    minWidth: 260,
+                    maxWidth: 320,
+                    width: '100%',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
                 }}
             >
-                {/* Logo / title */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                    <div style={{ fontSize: 36 }}>🧠</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: '#e5e7eb', letterSpacing: '-0.01em' }}>
+                {/* Logo */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    <div style={{ fontSize: 28 }}>🧠</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ui-text, #e5e7eb)', letterSpacing: '-0.01em' }}>
                         Mineo
                     </div>
                 </div>
 
-                {/* Password field */}
-                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Password */}
+                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <input
                         ref={inputRef}
                         type="password"
@@ -87,41 +85,42 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
                         autoComplete="current-password"
                         style={{
                             width: '100%',
-                            padding: '10px 14px',
-                            background: '#2a2a2a',
-                            border: `1px solid ${error ? '#ef4444' : '#444'}`,
-                            borderRadius: 7,
-                            color: '#e5e7eb',
-                            fontSize: 15,
+                            height: 30,
+                            padding: '0 10px',
+                            background: 'var(--ui-bg, #121212)',
+                            border: `1px solid ${error ? '#f87171' : 'var(--ui-border, #2a2a2a)'}`,
+                            borderRadius: 4,
+                            color: 'var(--ui-text, #e5e7eb)',
+                            fontSize: 12,
                             outline: 'none',
-                            transition: 'border-color 0.15s',
-                            fontFamily: 'inherit',
+                            transition: 'border-color 0.12s, box-shadow 0.12s',
+                            fontFamily: "'JetBrains Mono', Menlo, monospace",
                         }}
-                        onFocus={e => { if (!error) e.currentTarget.style.borderColor = '#3b82f6'; }}
-                        onBlur={e => { if (!error) e.currentTarget.style.borderColor = '#444'; }}
+                        onFocus={e => { if (!error) { e.currentTarget.style.borderColor = 'var(--ui-accent, #60a5fa)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(96,165,250,0.15)'; }}}
+                        onBlur={e => { if (!error) { e.currentTarget.style.borderColor = 'var(--ui-border, #2a2a2a)'; e.currentTarget.style.boxShadow = 'none'; }}}
                     />
                     {error && (
-                        <div style={{ fontSize: 12, color: '#ef4444', textAlign: 'center' }}>
+                        <div style={{ fontSize: 10, color: '#f87171', textAlign: 'center' }}>
                             {error}
                         </div>
                     )}
                 </div>
 
-                {/* Submit button */}
+                {/* Submit */}
                 <button
                     type="submit"
                     disabled={loading || !password}
                     style={{
                         width: '100%',
-                        padding: '10px 0',
-                        background: loading || !password ? '#2a2a2a' : '#3b82f6',
+                        height: 30,
+                        background: loading || !password ? 'var(--ui-surface, #1e1e1e)' : 'var(--ui-accent, #60a5fa)',
                         color: loading || !password ? '#6b7280' : '#fff',
-                        border: 'none',
-                        borderRadius: 7,
-                        fontSize: 14,
+                        border: loading || !password ? '1px solid var(--ui-border, #2a2a2a)' : 'none',
+                        borderRadius: 4,
+                        fontSize: 11,
                         fontWeight: 600,
                         cursor: loading || !password ? 'default' : 'pointer',
-                        transition: 'background 0.15s, color 0.15s',
+                        transition: 'background 0.12s, color 0.12s, opacity 0.12s',
                     }}
                 >
                     {loading ? 'Signing in…' : 'Sign in'}

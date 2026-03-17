@@ -18,14 +18,14 @@ import (
 var ptyPathRe = regexp.MustCompile(`^/pty/([^/]+)/(data|resize|buffer-watch)$`)
 
 // RegisterPtyWebSockets registers all PTY-related WebSocket upgrade handlers.
-func RegisterPtyWebSockets(mux *http.ServeMux, upgrader *websocket.Upgrader, ptyMgr *PtyManager) {
+func RegisterPtyWebSockets(mux *http.ServeMux, upgrader *websocket.Upgrader, tmuxMgr *TmuxManager) {
 	mux.HandleFunc("/services/pty/control", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Printf("[ws-pty] control upgrade failed: %v", err)
 			return
 		}
-		handleControl(conn, ptyMgr)
+		handleControl(conn, tmuxMgr)
 	})
 
 	// Dynamic PTY paths: /pty/{id}/{channel}
@@ -47,11 +47,11 @@ func RegisterPtyWebSockets(mux *http.ServeMux, upgrader *websocket.Upgrader, pty
 
 		switch channel {
 		case "data":
-			handleData(conn, instanceID, ptyMgr)
+			handleData(conn, instanceID, tmuxMgr)
 		case "resize":
-			handleResize(conn, instanceID, ptyMgr)
+			handleResize(conn, instanceID, tmuxMgr)
 		case "buffer-watch":
-			handleBufferWatch(conn, instanceID, ptyMgr)
+			handleBufferWatch(conn, instanceID, tmuxMgr)
 		}
 	})
 }
@@ -73,7 +73,7 @@ type controlReply struct {
 	Error      string `json:"error,omitempty"`
 }
 
-func handleControl(conn *websocket.Conn, ptyMgr *PtyManager) {
+func handleControl(conn *websocket.Conn, tmuxMgr *TmuxManager) {
 	defer conn.Close()
 
 	for {
@@ -102,7 +102,7 @@ func handleControl(conn *websocket.Conn, ptyMgr *PtyManager) {
 			if role != RoleNeovim && role != RoleTerminal {
 				role = RoleTerminal
 			}
-			spawnErr := ptyMgr.Spawn(msg.InstanceID, role, uint16(cols), uint16(rows), msg.Cwd)
+			spawnErr := tmuxMgr.Spawn(msg.InstanceID, role, uint16(cols), uint16(rows), msg.Cwd)
 			reply := controlReply{InstanceID: msg.InstanceID, Status: "ok"}
 			if spawnErr != nil {
 				reply.Status = "error"
@@ -112,17 +112,38 @@ func handleControl(conn *websocket.Conn, ptyMgr *PtyManager) {
 			conn.WriteMessage(websocket.TextMessage, data)
 
 		case "kill":
-			ptyMgr.Kill(msg.InstanceID)
+			tmuxMgr.Kill(msg.InstanceID)
 			reply := controlReply{InstanceID: msg.InstanceID, Status: "ok"}
 			data, _ := json.Marshal(reply)
+			conn.WriteMessage(websocket.TextMessage, data)
+
+		case "detach":
+			tmuxMgr.Detach(msg.InstanceID)
+			reply := controlReply{InstanceID: msg.InstanceID, Status: "ok"}
+			data, _ := json.Marshal(reply)
+			conn.WriteMessage(websocket.TextMessage, data)
+
+		case "list":
+			windows := tmuxMgr.ListWindows()
+			type listReply struct {
+				Type    string       `json:"type"`
+				Windows []WindowInfo `json:"windows"`
+			}
+			data, _ := json.Marshal(listReply{Type: "list", Windows: windows})
 			conn.WriteMessage(websocket.TextMessage, data)
 		}
 	}
 }
 
-func handleData(conn *websocket.Conn, instanceID string, ptyMgr *PtyManager) {
+func handleData(conn *websocket.Conn, instanceID string, tmuxMgr *TmuxManager) {
+	// Send scrollback first, before subscribing to live output
+	scrollback, err := tmuxMgr.CaptureScrollback(instanceID, 1000)
+	if err == nil && len(scrollback) > 0 {
+		conn.WriteMessage(websocket.BinaryMessage, scrollback)
+	}
+
 	// Subscribe to PTY output and forward to WebSocket
-	unsub := ptyMgr.OnData(instanceID, func(data []byte) {
+	unsub := tmuxMgr.OnData(instanceID, func(data []byte) {
 		conn.WriteMessage(websocket.BinaryMessage, data)
 	})
 	defer unsub()
@@ -134,11 +155,11 @@ func handleData(conn *websocket.Conn, instanceID string, ptyMgr *PtyManager) {
 		if err != nil {
 			return
 		}
-		ptyMgr.Write(instanceID, raw)
+		tmuxMgr.Write(instanceID, raw)
 	}
 }
 
-func handleResize(conn *websocket.Conn, instanceID string, ptyMgr *PtyManager) {
+func handleResize(conn *websocket.Conn, instanceID string, tmuxMgr *TmuxManager) {
 	defer conn.Close()
 
 	for {
@@ -155,11 +176,11 @@ func handleResize(conn *websocket.Conn, instanceID string, ptyMgr *PtyManager) {
 		if err1 != nil || err2 != nil || cols <= 0 || rows <= 0 {
 			continue
 		}
-		ptyMgr.Resize(instanceID, uint16(cols), uint16(rows))
+		tmuxMgr.Resize(instanceID, uint16(cols), uint16(rows))
 	}
 }
 
-func handleBufferWatch(conn *websocket.Conn, instanceID string, ptyMgr *PtyManager) {
+func handleBufferWatch(conn *websocket.Conn, instanceID string, tmuxMgr *TmuxManager) {
 	defer conn.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -185,12 +206,12 @@ func handleBufferWatch(conn *websocket.Conn, instanceID string, ptyMgr *PtyManag
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			sockPath := ptyMgr.GetSocketPath(instanceID)
+			sockPath := tmuxMgr.GetSocketPath(instanceID)
 			if sockPath == "" {
 				continue
 			}
 
-			nvimBin := ptyMgr.GetNvimBin()
+			nvimBin := tmuxMgr.GetNvimBin()
 			cmdCtx, cmdCancel := context.WithTimeout(ctx, 300*time.Millisecond)
 			out, err := exec.CommandContext(cmdCtx, nvimBin,
 				"--server", sockPath,

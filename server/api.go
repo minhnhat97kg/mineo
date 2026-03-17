@@ -27,7 +27,7 @@ var hiddenDirs = map[string]bool{
 }
 
 // RegisterAPIRoutes registers all REST API endpoints.
-func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, configPath string, lspMgr *LspServerManager) {
+func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, configPath string, lspMgr *LspServerManager) {
 	// ── GET /healthz ──────────────────────────────────────────────────
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -475,7 +475,7 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, co
 
 	// ── GET /api/nvim-ready ───────────────────────────────────────────
 	mux.HandleFunc("GET /api/nvim-ready", func(w http.ResponseWriter, r *http.Request) {
-		sockPath := ptyMgr.GetPrimarySocketPath()
+		sockPath := tmuxMgr.GetPrimarySocketPath()
 		if sockPath == "" {
 			writeJSON(w, http.StatusOK, map[string]bool{"ready": false})
 			return
@@ -516,9 +516,9 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, co
 		for i := 0; i < maxAttempts; i++ {
 			var sockPath string
 			if instanceID != "" {
-				sockPath = ptyMgr.GetSocketPath(instanceID)
+				sockPath = tmuxMgr.GetSocketPath(instanceID)
 			} else {
-				sockPath = ptyMgr.GetPrimarySocketPath()
+				sockPath = tmuxMgr.GetPrimarySocketPath()
 			}
 			if sockPath == "" {
 				if i < maxAttempts-1 {
@@ -536,7 +536,7 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, co
 				continue
 			}
 
-			nvimBin := ptyMgr.GetNvimBin()
+			nvimBin := tmuxMgr.GetNvimBin()
 			ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 			// Use --remote-send with :e to open silently (--remote-silent can show
 			// "Press ENTER" prompts when nvim is busy or the file is already open)
@@ -570,7 +570,7 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, co
 
 	// ── GET /api/nvim-config ──────────────────────────────────────────
 	mux.HandleFunc("GET /api/nvim-config", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, ptyMgr.GetNvimConfigInfo())
+		writeJSON(w, http.StatusOK, tmuxMgr.GetNvimConfigInfo())
 	})
 
 	// ── POST /api/nvim-config ─────────────────────────────────────────
@@ -615,17 +615,17 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, co
 			return
 		}
 		freshCfg := LoadConfig(configPath)
-		ptyMgr.ReloadConfig(freshCfg)
+		tmuxMgr.ReloadConfig(freshCfg)
 
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"ok":     true,
-			"config": ptyMgr.GetNvimConfigInfo(),
+			"config": tmuxMgr.GetNvimConfigInfo(),
 		})
 	})
 
 	// ── GET /api/nvim-config-dir ──────────────────────────────────────
 	mux.HandleFunc("GET /api/nvim-config-dir", func(w http.ResponseWriter, r *http.Request) {
-		info := ptyMgr.GetNvimConfigInfo()
+		info := tmuxMgr.GetNvimConfigInfo()
 		var configDir string
 		switch info.ConfigMode {
 		case "bundled":
@@ -662,6 +662,51 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, ptyMgr *PtyManager, co
 		}
 		stopped := lspMgr.StopLang(body.Lang)
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "was_running": stopped})
+	})
+
+	// ── GET /api/session/windows ─────────────────────────────────────
+	mux.HandleFunc("GET /api/session/windows", func(w http.ResponseWriter, r *http.Request) {
+		windows := tmuxMgr.ListWindows()
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"session": tmuxMgr.GetSessionName(),
+			"windows": windows,
+		})
+	})
+
+	// ── GET /api/session/layout ──────────────────────────────────────
+	mux.HandleFunc("GET /api/session/layout", func(w http.ResponseWriter, r *http.Request) {
+		data, err := tmuxMgr.LoadLayout()
+		if err != nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"layout": nil})
+			return
+		}
+		var layout interface{}
+		if err := json.Unmarshal(data, &layout); err != nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"layout": nil})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"layout": layout})
+	})
+
+	// ── POST /api/session/layout ─────────────────────────────────────
+	mux.HandleFunc("POST /api/session/layout", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Layout interface{} `json:"layout"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON"})
+			return
+		}
+		data, err := json.Marshal(body.Layout)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to marshal layout"})
+			return
+		}
+		if err := tmuxMgr.SaveLayout(data); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 	})
 }
 
