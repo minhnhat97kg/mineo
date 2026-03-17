@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"context"
@@ -13,11 +13,15 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"mineo/server/internal/config"
+	"mineo/server/internal/lsp"
+	"mineo/server/internal/tmux"
 )
 
 // hiddenDirs are filtered from workspace file listings.
 var hiddenDirs = map[string]bool{
-	".git":        true,
+	".git":         true,
 	"node_modules": true,
 	".DS_Store":    true,
 	"__pycache__":  true,
@@ -27,7 +31,7 @@ var hiddenDirs = map[string]bool{
 }
 
 // RegisterAPIRoutes registers all REST API endpoints.
-func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, configPath string, lspMgr *LspServerManager) {
+func RegisterAPIRoutes(mux *http.ServeMux, cfg *config.MineoCfg, tmuxMgr *tmux.TmuxManager, configPath string, lspMgr *lsp.LspServerManager) {
 	// ── GET /healthz ──────────────────────────────────────────────────
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -35,9 +39,9 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 
 	// ── GET /api/workspace ────────────────────────────────────────────
 	mux.HandleFunc("GET /api/workspace", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		ws := cfg.Workspace
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 		writeJSON(w, http.StatusOK, map[string]string{"workspace": ws})
 	})
 
@@ -45,7 +49,7 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 	mux.HandleFunc("GET /api/browse", func(w http.ResponseWriter, r *http.Request) {
 		dir := r.URL.Query().Get("dir")
 		if dir == "" {
-			dir = homeDir()
+			dir = config.HomeDir()
 		}
 		if !filepath.IsAbs(dir) || strings.Contains(dir, "..") {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid path"})
@@ -95,9 +99,9 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 
 	// ── GET /api/files?dir= ───────────────────────────────────────────
 	mux.HandleFunc("GET /api/files", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		workspace := cfg.Workspace
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		dir := r.URL.Query().Get("dir")
 		if dir == "" {
@@ -159,9 +163,9 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 
 	// ── POST /api/files/create ────────────────────────────────────────
 	mux.HandleFunc("POST /api/files/create", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		workspace := cfg.Workspace
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		var body struct {
 			ParentDir   string `json:"parentDir"`
@@ -201,9 +205,9 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 
 	// ── POST /api/files/rename ────────────────────────────────────────
 	mux.HandleFunc("POST /api/files/rename", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		workspace := cfg.Workspace
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		var body struct {
 			OldPath string `json:"oldPath"`
@@ -243,9 +247,9 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 
 	// ── POST /api/files/delete ────────────────────────────────────────
 	mux.HandleFunc("POST /api/files/delete", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		workspace := cfg.Workspace
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		var body struct {
 			TargetPath string `json:"targetPath"`
@@ -275,9 +279,9 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 
 	// ── GET /api/files/download?path= ────────────────────────────────
 	mux.HandleFunc("GET /api/files/download", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		workspace := cfg.Workspace
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		p := r.URL.Query().Get("path")
 		resolved := validateWorkspacePath(p, workspace, w)
@@ -300,9 +304,9 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 
 	// ── POST /api/files/upload?dir= ───────────────────────────────────
 	mux.HandleFunc("POST /api/files/upload", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		workspace := cfg.Workspace
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		dir := r.URL.Query().Get("dir")
 		destDir := validateWorkspacePath(dir, workspace, w)
@@ -362,10 +366,10 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 
 	// ── GET /api/config ───────────────────────────────────────────────
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		ws := cfg.Workspace
 		pw := cfg.Password
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		pwDisplay := ""
 		if pw != "" {
@@ -406,29 +410,29 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 			patch["password"] = pwStr
 		}
 
-		if err := SaveConfig(configPath, patch); err != nil {
+		if err := config.SaveConfig(configPath, patch); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
 
 		// Hot-reload
-		cfg.mu.Lock()
+		cfg.Mu.Lock()
 		if ws, ok := patch["workspace"].(string); ok {
 			cfg.Workspace = ws
 		}
 		if pw, ok := patch["password"].(string); ok {
 			cfg.Password = pw
 		}
-		cfg.mu.Unlock()
+		cfg.Mu.Unlock()
 
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 	})
 
 	// ── GET /api/git/status ───────────────────────────────────────────
 	mux.HandleFunc("GET /api/git/status", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		workspace := cfg.Workspace
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
@@ -480,7 +484,7 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 			writeJSON(w, http.StatusOK, map[string]bool{"ready": false})
 			return
 		}
-		ready := CheckNvimReady(sockPath, 500)
+		ready := config.CheckNvimReady(sockPath, 500)
 		writeJSON(w, http.StatusOK, map[string]bool{"ready": ready})
 	})
 
@@ -528,7 +532,7 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 			}
 
 			// Wait until nvim's RPC socket is actually accepting connections
-			ready := CheckNvimReady(sockPath, 400)
+			ready := config.CheckNvimReady(sockPath, 400)
 			if !ready {
 				if i < maxAttempts-1 {
 					time.Sleep(retryMs * time.Millisecond)
@@ -610,11 +614,11 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 			patch["configDir"] = dirStr
 		}
 
-		if err := SaveNvimConfig(configPath, patch); err != nil {
+		if err := config.SaveNvimConfig(configPath, patch); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		freshCfg := LoadConfig(configPath)
+		freshCfg := config.LoadConfig(configPath)
 		tmuxMgr.ReloadConfig(freshCfg)
 
 		writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -634,10 +638,10 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 			if info.ConfigDir != "" {
 				configDir = info.ConfigDir
 			} else {
-				configDir = filepath.Join(homeDir(), ".config", "nvim")
+				configDir = filepath.Join(config.HomeDir(), ".config", "nvim")
 			}
 		default: // system
-			configDir = filepath.Join(homeDir(), ".config", "nvim")
+			configDir = filepath.Join(config.HomeDir(), ".config", "nvim")
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"configDir": configDir})
 	})
@@ -656,7 +660,7 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *MineoCfg, tmuxMgr *TmuxManager, 
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing lang"})
 			return
 		}
-		if _, ok := LSP_SERVERS[body.Lang]; !ok {
+		if _, ok := lsp.LSP_SERVERS[body.Lang]; !ok {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown language"})
 			return
 		}
@@ -726,7 +730,7 @@ func validateWorkspacePath(p string, workspace string, w http.ResponseWriter) st
 }
 
 // ValidateStartup checks startup preconditions and exits fatally if they fail.
-func ValidateStartup(cfg *MineoCfg) {
+func ValidateStartup(cfg *config.MineoCfg) {
 	if _, err := os.Stat(cfg.Workspace); os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr,
 			"Error: Workspace not found: %q. Create it or update workspace in config.json.\n",
@@ -756,7 +760,6 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 
 // getTotalMemGB returns the total system memory in GB.
 func getTotalMemGB() int {
-	// Use sysctl on macOS, /proc/meminfo on Linux
 	switch runtime.GOOS {
 	case "darwin":
 		out, err := exec.Command("sysctl", "-n", "hw.memsize").Output()

@@ -12,6 +12,13 @@ import (
 	"syscall"
 
 	"github.com/gorilla/websocket"
+	"mineo/server/internal/api"
+	"mineo/server/internal/auth"
+	"mineo/server/internal/config"
+	"mineo/server/internal/lsp"
+	"mineo/server/internal/plugin"
+	"mineo/server/internal/tmux"
+	"mineo/server/internal/ws"
 )
 
 func main() {
@@ -38,8 +45,8 @@ func main() {
 	appDir := filepath.Dir(configPath)
 
 	// ── Load configuration ────────────────────────────────────────────
-	cfg := LoadConfig(configPath)
-	secret, err := LoadOrCreateSecret(secretPath)
+	cfg := config.LoadConfig(configPath)
+	secret, err := config.LoadOrCreateSecret(secretPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
@@ -47,10 +54,10 @@ func main() {
 	cfg.Secret = secret
 
 	// ── Validate startup preconditions ────────────────────────────────
-	ValidateStartup(cfg)
+	api.ValidateStartup(cfg)
 
-	// ── Create Tmux manager (replaces PTY manager) ─────────────────
-	tmuxMgr := NewTmuxManager(cfg, appDir)
+	// ── Create Tmux manager ───────────────────────────────────────────
+	tmuxMgr := tmux.NewTmuxManager(cfg, appDir)
 
 	// ── WebSocket upgrader (shared) ───────────────────────────────────
 	allowedOrigins := buildAllowedOrigins(cfg.Port)
@@ -62,28 +69,26 @@ func main() {
 	mux := http.NewServeMux()
 
 	// ── Auth ──────────────────────────────────────────────────────────
-	sessionStore := RegisterAuth(mux, cfg.Password, secret)
+	sessionStore := auth.RegisterAuth(mux, cfg.Password, secret)
 
 	// ── WebSocket routes ──────────────────────────────────────────────
-	// Wrap WS handlers with auth check
-	RegisterPtyWebSocketsWithAuth(mux, upgrader, tmuxMgr, sessionStore)
-	RegisterFileWatchWithAuth(mux, cfg.Workspace, upgrader, sessionStore)
-	lspMgr := NewLspServerManager(upgrader)
-	RegisterLspWithAuth(mux, lspMgr, sessionStore)
+	registerPtyWithAuth(mux, upgrader, tmuxMgr, sessionStore)
+	registerFileWatchWithAuth(mux, cfg.Workspace, upgrader, sessionStore)
+	lspMgr := lsp.NewLspServerManager(upgrader)
+	registerLspWithAuth(mux, lspMgr, sessionStore)
 
 	// ── API routes ────────────────────────────────────────────────────
-	// lspMgr must be created first so the API routes can reference it
-	RegisterAPIRoutes(mux, cfg, tmuxMgr, configPath, lspMgr)
+	api.RegisterAPIRoutes(mux, cfg, tmuxMgr, configPath, lspMgr)
 
 	// ── Plugin routes ─────────────────────────────────────────────────
-	MountPlugins(mux, cfg)
+	plugin.MountPlugins(mux, cfg)
 
 	// ── Frontend (embedded static files) ──────────────────────────────
 	RegisterFrontend(mux)
 
 	// ── Wrap mux with auth middleware ─────────────────────────────────
 	var handler http.Handler = mux
-	handler = NewAuthMiddleware(cfg.Password, sessionStore, handler)
+	handler = auth.NewAuthMiddleware(cfg.Password, sessionStore, handler)
 
 	// ── Start server ──────────────────────────────────────────────────
 	addr := fmt.Sprintf("0.0.0.0:%d", cfg.Port)
@@ -112,9 +117,6 @@ func main() {
 }
 
 // buildAllowedOrigins returns the list of permitted WebSocket origins.
-// It always includes localhost and 127.0.0.1 on the configured port, and
-// any extra origins from the MINEO_ALLOWED_ORIGINS environment variable
-// (comma-separated).
 func buildAllowedOrigins(port int) []string {
 	origins := []string{
 		fmt.Sprintf("http://localhost:%d", port),
@@ -131,13 +133,7 @@ func buildAllowedOrigins(port int) []string {
 }
 
 // makeCheckOrigin returns a gorilla/websocket CheckOrigin function that only
-// allows same-origin connections. A request is considered same-origin when:
-//   - it has no Origin header (non-browser / curl client), or
-//   - the Origin's host:port matches the request's Host header (standard browser same-origin), or
-//   - the origin appears in the explicit allowedOrigins list (e.g. for reverse-proxy setups).
-//
-// This replaces the previous "return true" catch-all while still working for
-// every normal Mineo deployment (direct browser access, LAN IP, custom domain).
+// allows same-origin connections.
 func makeCheckOrigin(allowedOrigins []string) func(*http.Request) bool {
 	return func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
@@ -145,20 +141,16 @@ func makeCheckOrigin(allowedOrigins []string) func(*http.Request) bool {
 			return true // non-browser clients (curl, native WS libs, etc.)
 		}
 
-		// Parse origin to extract its host
 		originURL, err := url.Parse(origin)
 		if err != nil {
 			log.Printf("ws: rejected malformed origin %q", origin)
 			return false
 		}
 
-		// Same-origin: origin host matches the Host header the server received
-		// (handles localhost, LAN IPs, custom hostnames, and custom ports transparently)
 		if strings.EqualFold(originURL.Host, r.Host) {
 			return true
 		}
 
-		// Explicit allowlist (env var MINEO_ALLOWED_ORIGINS — for reverse-proxy scenarios)
 		for _, a := range allowedOrigins {
 			if strings.EqualFold(origin, a) {
 				return true
@@ -170,15 +162,13 @@ func makeCheckOrigin(allowedOrigins []string) func(*http.Request) bool {
 	}
 }
 
-// RegisterPtyWebSocketsWithAuth wraps PTY WebSocket handlers with auth gating.
-func RegisterPtyWebSocketsWithAuth(mux *http.ServeMux, upgrader *websocket.Upgrader, tmuxMgr *TmuxManager, store *SessionStore) {
+func registerPtyWithAuth(mux *http.ServeMux, upgrader *websocket.Upgrader, tmuxMgr *tmux.TmuxManager, store *auth.SessionStore) {
 	innerMux := http.NewServeMux()
-	RegisterPtyWebSockets(innerMux, upgrader, tmuxMgr)
+	ws.RegisterPtyWebSockets(innerMux, upgrader, tmuxMgr)
 
-	// Re-register each path on the outer mux with auth check
 	wsAuthWrap := func(pattern string) {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-			if !AuthorizeWS(r, store) {
+			if !auth.AuthorizeWS(r, store) {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
@@ -190,13 +180,12 @@ func RegisterPtyWebSocketsWithAuth(mux *http.ServeMux, upgrader *websocket.Upgra
 	wsAuthWrap("/pty/")
 }
 
-// RegisterFileWatchWithAuth wraps file-watch WebSocket with auth gating.
-func RegisterFileWatchWithAuth(mux *http.ServeMux, workspace string, upgrader *websocket.Upgrader, store *SessionStore) {
-	fw := NewFileWatcher(workspace, upgrader)
+func registerFileWatchWithAuth(mux *http.ServeMux, workspace string, upgrader *websocket.Upgrader, store *auth.SessionStore) {
+	fw := ws.NewFileWatcher(workspace, upgrader)
 	fw.Start()
 
 	mux.HandleFunc("/services/file-watch", func(w http.ResponseWriter, r *http.Request) {
-		if !AuthorizeWS(r, store) {
+		if !auth.AuthorizeWS(r, store) {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -204,13 +193,12 @@ func RegisterFileWatchWithAuth(mux *http.ServeMux, workspace string, upgrader *w
 	})
 }
 
-// RegisterLspWithAuth wraps LSP WebSocket with auth gating.
-func RegisterLspWithAuth(mux *http.ServeMux, lspMgr *LspServerManager, store *SessionStore) {
+func registerLspWithAuth(mux *http.ServeMux, lspMgr *lsp.LspServerManager, store *auth.SessionStore) {
 	innerMux := http.NewServeMux()
 	lspMgr.RegisterLspWebSockets(innerMux)
 
 	mux.HandleFunc("/lsp/", func(w http.ResponseWriter, r *http.Request) {
-		if !AuthorizeWS(r, store) {
+		if !auth.AuthorizeWS(r, store) {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}

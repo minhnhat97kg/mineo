@@ -44,7 +44,7 @@ type MineoCfg struct {
 func defaults() *MineoCfg {
 	cwd, err := os.Getwd()
 	if err != nil {
-		cwd = homeDir()
+		cwd = HomeDir()
 	}
 	cfg := &MineoCfg{
 		Port:      3000,
@@ -57,7 +57,7 @@ func defaults() *MineoCfg {
 	return cfg
 }
 
-func homeDir() string {
+func HomeDir() string {
 	if u, err := user.Current(); err == nil {
 		return u.HomeDir
 	}
@@ -69,7 +69,7 @@ func homeDir() string {
 
 func expandTilde(p string) string {
 	if strings.HasPrefix(p, "~/") || p == "~" {
-		return filepath.Join(homeDir(), p[1:])
+		return filepath.Join(HomeDir(), p[1:])
 	}
 	return p
 }
