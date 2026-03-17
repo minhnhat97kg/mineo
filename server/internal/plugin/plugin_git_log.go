@@ -1,4 +1,4 @@
-package main
+package plugin
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"mineo/server/internal/config"
 )
 
 func init() {
@@ -17,14 +19,14 @@ type GitLogPlugin struct{}
 
 func (g *GitLogPlugin) Name() string { return "git-log" }
 
-func (g *GitLogPlugin) Register(mux *http.ServeMux, cfg *MineoCfg) {
+func (g *GitLogPlugin) Register(mux *http.ServeMux, cfg *config.MineoCfg) {
 	// ── GET /api/plugin/git-log/commits ──────────────────────────────
 	// Returns the last 200 commits with hash, short hash, subject, author,
 	// ISO date, and ref decorations (branches/tags).
 	mux.HandleFunc("GET /api/plugin/git-log/commits", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		workspace := cfg.Workspace
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
@@ -52,12 +54,12 @@ func (g *GitLogPlugin) Register(mux *http.ServeMux, cfg *MineoCfg) {
 		}
 
 		type Commit struct {
-			Hash      string   `json:"hash"`
-			Short     string   `json:"short"`
-			Author    string   `json:"author"`
-			Date      string   `json:"date"`
-			Refs      []string `json:"refs"`
-			Subject   string   `json:"subject"`
+			Hash    string   `json:"hash"`
+			Short   string   `json:"short"`
+			Author  string   `json:"author"`
+			Date    string   `json:"date"`
+			Refs    []string `json:"refs"`
+			Subject string   `json:"subject"`
 		}
 
 		lines := strings.Split(string(out), "\n")
@@ -104,9 +106,9 @@ func (g *GitLogPlugin) Register(mux *http.ServeMux, cfg *MineoCfg) {
 	// ── GET /api/plugin/git-log/diff?hash= ───────────────────────────
 	// Returns the full diff (git show) for a given commit hash.
 	mux.HandleFunc("GET /api/plugin/git-log/diff", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		workspace := cfg.Workspace
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		hash := r.URL.Query().Get("hash")
 		if hash == "" || strings.ContainsAny(hash, " \t\n;|&`$(){}") {
@@ -135,9 +137,9 @@ func (g *GitLogPlugin) Register(mux *http.ServeMux, cfg *MineoCfg) {
 	// ── GET /api/plugin/git-log/branches ─────────────────────────────
 	// Returns all local + remote branches.
 	mux.HandleFunc("GET /api/plugin/git-log/branches", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		workspace := cfg.Workspace
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
@@ -161,9 +163,9 @@ func (g *GitLogPlugin) Register(mux *http.ServeMux, cfg *MineoCfg) {
 	// ── POST /api/plugin/git-log/checkout ────────────────────────────
 	// Checks out a branch by name.
 	mux.HandleFunc("POST /api/plugin/git-log/checkout", func(w http.ResponseWriter, r *http.Request) {
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		workspace := cfg.Workspace
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		var body struct {
 			Branch string `json:"branch"`

@@ -1,4 +1,4 @@
-package main
+package plugin
 
 // plugin_db.go — Database plugin for Mineo IDE
 //
@@ -32,6 +32,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/crypto/ssh"
 	_ "modernc.org/sqlite"
+
+	"mineo/server/internal/config"
 )
 
 // ── Plugin registration ───────────────────────────────────────────────────────
@@ -87,9 +89,9 @@ func (p *DBPlugin) Name() string { return "db" }
 
 // ── Helpers: file paths ───────────────────────────────────────────────────────
 
-func dbConnsPath(cfg *MineoCfg) string {
-	cfg.mu.RLock()
-	defer cfg.mu.RUnlock()
+func dbConnsPath(cfg *config.MineoCfg) string {
+	cfg.Mu.RLock()
+	defer cfg.Mu.RUnlock()
 	return filepath.Join(filepath.Dir(os.Getenv("MINEO_CONFIG_DIR_HINT")), "db-connections.json")
 }
 
@@ -316,10 +318,10 @@ func buildDSN(conn *StoredConnection, password, host string) string {
 
 // ── Open live connection ──────────────────────────────────────────────────────
 
-func (p *DBPlugin) openConnection(cfg *MineoCfg, conn *StoredConnection, password, sshPass string) (*liveConn, error) {
-	cfg.mu.RLock()
+func (p *DBPlugin) openConnection(cfg *config.MineoCfg, conn *StoredConnection, password, sshPass string) (*liveConn, error) {
+	cfg.Mu.RLock()
 	secret := cfg.Secret
-	cfg.mu.RUnlock()
+	cfg.Mu.RUnlock()
 
 	_ = secret // used indirectly via deriveKey when loading from stored secrets
 
@@ -876,7 +878,7 @@ func dbJSON(w http.ResponseWriter, status int, v interface{}) {
 
 // ── Register (HTTP routes) ────────────────────────────────────────────────────
 
-func (p *DBPlugin) Register(mux *http.ServeMux, cfg *MineoCfg) {
+func (p *DBPlugin) Register(mux *http.ServeMux, cfg *config.MineoCfg) {
 	// Stash config directory so sub-methods can use it.
 	// We derive it from the config path, which is in the same dir as the binary.
 	// We use the same approach as the rest of the server: resolve exe dir.
@@ -927,9 +929,9 @@ func (p *DBPlugin) Register(mux *http.ServeMux, cfg *MineoCfg) {
 			return
 		}
 
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		secret := cfg.Secret
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		key := deriveKey(secret)
 		secrets, _ := p.loadSecrets(key)
@@ -982,9 +984,9 @@ func (p *DBPlugin) Register(mux *http.ServeMux, cfg *MineoCfg) {
 			return
 		}
 
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		secret := cfg.Secret
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		key := deriveKey(secret)
 		secrets, _ := p.loadSecrets(key)
@@ -1027,9 +1029,9 @@ func (p *DBPlugin) Register(mux *http.ServeMux, cfg *MineoCfg) {
 			return
 		}
 
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		secret := cfg.Secret
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		key := deriveKey(secret)
 		secrets, _ := p.loadSecrets(key)
@@ -1076,9 +1078,9 @@ func (p *DBPlugin) Register(mux *http.ServeMux, cfg *MineoCfg) {
 			return
 		}
 
-		cfg.mu.RLock()
+		cfg.Mu.RLock()
 		secret := cfg.Secret
-		cfg.mu.RUnlock()
+		cfg.Mu.RUnlock()
 
 		key := deriveKey(secret)
 		secrets, _ := p.loadSecrets(key)
