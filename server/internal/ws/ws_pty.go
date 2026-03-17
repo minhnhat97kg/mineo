@@ -1,4 +1,4 @@
-package main
+package ws
 
 import (
 	"context"
@@ -12,13 +12,14 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"mineo/server/internal/tmux"
 )
 
 // ptyPathRe matches /pty/<instanceId>/<channel>
 var ptyPathRe = regexp.MustCompile(`^/pty/([^/]+)/(data|resize|buffer-watch)$`)
 
 // RegisterPtyWebSockets registers all PTY-related WebSocket upgrade handlers.
-func RegisterPtyWebSockets(mux *http.ServeMux, upgrader *websocket.Upgrader, tmuxMgr *TmuxManager) {
+func RegisterPtyWebSockets(mux *http.ServeMux, upgrader *websocket.Upgrader, tmuxMgr *tmux.TmuxManager) {
 	mux.HandleFunc("/services/pty/control", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -73,7 +74,7 @@ type controlReply struct {
 	Error      string `json:"error,omitempty"`
 }
 
-func handleControl(conn *websocket.Conn, tmuxMgr *TmuxManager) {
+func handleControl(conn *websocket.Conn, tmuxMgr *tmux.TmuxManager) {
 	defer conn.Close()
 
 	for {
@@ -98,9 +99,9 @@ func handleControl(conn *websocket.Conn, tmuxMgr *TmuxManager) {
 
 		switch msg.Type {
 		case "spawn":
-			role := PaneRole(msg.Role)
-			if role != RoleNeovim && role != RoleTerminal {
-				role = RoleTerminal
+			role := tmux.PaneRole(msg.Role)
+			if role != tmux.RoleNeovim && role != tmux.RoleTerminal {
+				role = tmux.RoleTerminal
 			}
 			spawnErr := tmuxMgr.Spawn(msg.InstanceID, role, uint16(cols), uint16(rows), msg.Cwd)
 			reply := controlReply{InstanceID: msg.InstanceID, Status: "ok"}
@@ -126,8 +127,8 @@ func handleControl(conn *websocket.Conn, tmuxMgr *TmuxManager) {
 		case "list":
 			windows := tmuxMgr.ListWindows()
 			type listReply struct {
-				Type    string       `json:"type"`
-				Windows []WindowInfo `json:"windows"`
+				Type    string           `json:"type"`
+				Windows []tmux.WindowInfo `json:"windows"`
 			}
 			data, _ := json.Marshal(listReply{Type: "list", Windows: windows})
 			conn.WriteMessage(websocket.TextMessage, data)
@@ -135,7 +136,7 @@ func handleControl(conn *websocket.Conn, tmuxMgr *TmuxManager) {
 	}
 }
 
-func handleData(conn *websocket.Conn, instanceID string, tmuxMgr *TmuxManager) {
+func handleData(conn *websocket.Conn, instanceID string, tmuxMgr *tmux.TmuxManager) {
 	// Send scrollback first, before subscribing to live output
 	scrollback, err := tmuxMgr.CaptureScrollback(instanceID, 1000)
 	if err == nil && len(scrollback) > 0 {
@@ -159,7 +160,7 @@ func handleData(conn *websocket.Conn, instanceID string, tmuxMgr *TmuxManager) {
 	}
 }
 
-func handleResize(conn *websocket.Conn, instanceID string, tmuxMgr *TmuxManager) {
+func handleResize(conn *websocket.Conn, instanceID string, tmuxMgr *tmux.TmuxManager) {
 	defer conn.Close()
 
 	for {
@@ -180,7 +181,7 @@ func handleResize(conn *websocket.Conn, instanceID string, tmuxMgr *TmuxManager)
 	}
 }
 
-func handleBufferWatch(conn *websocket.Conn, instanceID string, tmuxMgr *TmuxManager) {
+func handleBufferWatch(conn *websocket.Conn, instanceID string, tmuxMgr *tmux.TmuxManager) {
 	defer conn.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
