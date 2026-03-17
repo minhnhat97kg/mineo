@@ -1,4 +1,4 @@
-package main
+package tmux
 
 import (
 	"bytes"
@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	"mineo/server/internal/config"
 )
 
 // PaneRole describes the kind of PTY instance.
@@ -60,14 +61,14 @@ type TmuxManager struct {
 	session    string                     // tmux session name
 	instances  map[string]*attachedWindow // keyed by mineo instance ID
 	primaryID  string                     // first neovim window
-	cfg        *MineoCfg
+	cfg        *config.MineoCfg
 	appDir     string
 	layoutPath string // path to .mineo-layout.json
 }
 
 // NewTmuxManager creates a new TmuxManager, adopting an existing tmux session
 // if one already exists for this workspace, or creating a new one.
-func NewTmuxManager(cfg *MineoCfg, appDir string) *TmuxManager {
+func NewTmuxManager(cfg *config.MineoCfg, appDir string) *TmuxManager {
 	// 1. Check tmux is installed
 	if _, err := exec.LookPath("tmux"); err != nil {
 		log.Fatalf("tmux is required but not found in PATH: %v", err)
@@ -199,17 +200,17 @@ func isNvimSocketAlive(socketPath string) bool {
 
 // nvimConfigEnv returns extra env vars based on the configured nvim config mode.
 func (tm *TmuxManager) nvimConfigEnv() []string {
-	tm.cfg.mu.RLock()
+	tm.cfg.Mu.RLock()
 	mode := tm.cfg.Nvim.ConfigMode
 	configDir := tm.cfg.Nvim.ConfigDir
-	tm.cfg.mu.RUnlock()
+	tm.cfg.Mu.RUnlock()
 
 	bundledConfigDir := filepath.Join(tm.appDir, "nvim-config")
 
 	switch mode {
-	case NvimConfigBundled:
+	case config.NvimConfigBundled:
 		return []string{"XDG_CONFIG_HOME=" + bundledConfigDir}
-	case NvimConfigCustom:
+	case config.NvimConfigCustom:
 		if configDir != "" {
 			return []string{"XDG_CONFIG_HOME=" + configDir}
 		}
@@ -259,9 +260,9 @@ func (tm *TmuxManager) Spawn(id string, role PaneRole, cols, rows uint16, cwd st
 	var windowCmdArgs []string
 	var socketPath string
 
-	tm.cfg.mu.RLock()
+	tm.cfg.Mu.RLock()
 	nvimBin := tm.cfg.Nvim.Bin
-	tm.cfg.mu.RUnlock()
+	tm.cfg.Mu.RUnlock()
 
 	if role == RoleNeovim {
 		socketPath = fmt.Sprintf("/tmp/mineo-nvim-%s.sock", id)
@@ -660,8 +661,8 @@ func (tm *TmuxManager) GetPrimaryID() string {
 
 // GetNvimBin returns the configured nvim binary path.
 func (tm *TmuxManager) GetNvimBin() string {
-	tm.cfg.mu.RLock()
-	defer tm.cfg.mu.RUnlock()
+	tm.cfg.Mu.RLock()
+	defer tm.cfg.Mu.RUnlock()
 	return tm.cfg.Nvim.Bin
 }
 
@@ -675,8 +676,8 @@ type NvimConfigInfo struct {
 
 // GetNvimConfigInfo returns current nvim config info for the settings API.
 func (tm *TmuxManager) GetNvimConfigInfo() NvimConfigInfo {
-	tm.cfg.mu.RLock()
-	defer tm.cfg.mu.RUnlock()
+	tm.cfg.Mu.RLock()
+	defer tm.cfg.Mu.RUnlock()
 	return NvimConfigInfo{
 		Bin:              tm.cfg.Nvim.Bin,
 		ConfigMode:       string(tm.cfg.Nvim.ConfigMode),
@@ -686,9 +687,9 @@ func (tm *TmuxManager) GetNvimConfigInfo() NvimConfigInfo {
 }
 
 // ReloadConfig reloads the nvim section from a fresh config.
-func (tm *TmuxManager) ReloadConfig(fresh *MineoCfg) {
-	tm.cfg.mu.Lock()
-	defer tm.cfg.mu.Unlock()
+func (tm *TmuxManager) ReloadConfig(fresh *config.MineoCfg) {
+	tm.cfg.Mu.Lock()
+	defer tm.cfg.Mu.Unlock()
 	if fresh != nil {
 		tm.cfg.Nvim.Bin = fresh.Nvim.Bin
 		tm.cfg.Nvim.ConfigMode = fresh.Nvim.ConfigMode

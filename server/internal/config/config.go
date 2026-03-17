@@ -36,7 +36,7 @@ type MineoCfg struct {
 	// It is never written to config.json (json:"-").
 	Secret string `json:"-"`
 
-	mu sync.RWMutex // protects hot-reload of workspace/password
+	Mu sync.RWMutex // protects hot-reload of workspace/password
 }
 
 // defaults returns a MineoCfg with sensible defaults.
