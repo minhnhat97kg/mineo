@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
 # Mineo — installation script
-# Usage:  curl -fsSL https://raw.githubusercontent.com/minhnhat97kg/mineo/main/install.sh | bash
+# Usage:  curl -fsSL https://raw.githubusercontent.com/minhnhat97kg/mineo/master/install.sh | bash
 #         or just:  bash install.sh
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail

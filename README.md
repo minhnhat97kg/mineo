@@ -26,7 +26,7 @@ A self-hosted, browser-based Neovim IDE. Run it on any machine and access your f
 ### One-liner (Linux & macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/minhnhat97kg/mineo/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/minhnhat97kg/mineo/master/install.sh | bash
 ```
 
 This will:

@@ -164,7 +164,7 @@ jobs:
             ## Installation
 
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/minhnhat97kg/mineo/main/install.sh | bash
+            curl -fsSL https://raw.githubusercontent.com/minhnhat97kg/mineo/master/install.sh | bash
             ```
 
             Or download the binary for your platform below and place it in your `$PATH`.
