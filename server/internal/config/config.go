@@ -21,6 +21,13 @@ const (
 	NvimConfigCustom  NvimConfigMode = "custom"
 )
 
+// UISettings holds user interface preferences persisted server-side.
+type UISettings struct {
+	FontFamily string `json:"fontFamily"`
+	FontSize   int    `json:"fontSize"`
+	Theme      string `json:"theme"`
+}
+
 // MineoCfg holds the application configuration.
 type MineoCfg struct {
 	Port      int    `json:"port"`
@@ -31,6 +38,7 @@ type MineoCfg struct {
 		ConfigMode NvimConfigMode `json:"configMode"`
 		ConfigDir  string         `json:"configDir"`
 	} `json:"nvim"`
+	UI UISettings `json:"ui"`
 
 	// Secret is the hex session secret loaded from .secret at startup.
 	// It is never written to config.json (json:"-").
@@ -54,6 +62,9 @@ func defaults() *MineoCfg {
 	cfg.Nvim.Bin = "nvim"
 	cfg.Nvim.ConfigMode = NvimConfigSystem
 	cfg.Nvim.ConfigDir = ""
+	cfg.UI.FontFamily = `"JetBrainsMono Nerd Font", "JetBrains Mono", Menlo, Monaco, "Courier New", monospace`
+	cfg.UI.FontSize = 13
+	cfg.UI.Theme = "mineo-dark"
 	return cfg
 }
 
@@ -121,6 +132,21 @@ func LoadConfig(configPath string) *MineoCfg {
 		}
 	}
 
+	if v, ok := raw["ui"]; ok {
+		var ui UISettings
+		if err := json.Unmarshal(v, &ui); err == nil {
+			if ui.FontFamily != "" {
+				cfg.UI.FontFamily = ui.FontFamily
+			}
+			if ui.FontSize > 0 {
+				cfg.UI.FontSize = ui.FontSize
+			}
+			if ui.Theme != "" {
+				cfg.UI.Theme = ui.Theme
+			}
+		}
+	}
+
 	if v, ok := raw["nvim"]; ok {
 		var nvimRaw map[string]json.RawMessage
 		if err := json.Unmarshal(v, &nvimRaw); err == nil {
@@ -168,6 +194,13 @@ func SaveConfig(configPath string, patch map[string]interface{}) error {
 		raw["password"] = pw
 	}
 
+	return writeConfigJSON(configPath, raw)
+}
+
+// SaveUISettings persists the ui section of config back to config.json.
+func SaveUISettings(configPath string, ui UISettings) error {
+	raw := loadRawJSON(configPath)
+	raw["ui"] = ui
 	return writeConfigJSON(configPath, raw)
 }
 

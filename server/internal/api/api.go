@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
 	"os"
@@ -512,6 +513,7 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *config.MineoCfg, tmuxMgr *tmux.T
 		}
 
 		instanceID := r.URL.Query().Get("instanceId")
+		log.Printf("[nvim-open] file=%q instanceId=%q", file, instanceID)
 
 		const retryMs = 500
 		const maxAttempts = 20 // up to 10 seconds
@@ -525,6 +527,9 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *config.MineoCfg, tmuxMgr *tmux.T
 				sockPath = tmuxMgr.GetPrimarySocketPath()
 			}
 			if sockPath == "" {
+				if i == 0 {
+					log.Printf("[nvim-open] no socket path for instanceId=%q (known instances: %v)", instanceID, tmuxMgr.ListWindows())
+				}
 				if i < maxAttempts-1 {
 					time.Sleep(retryMs * time.Millisecond)
 				}
@@ -534,6 +539,9 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *config.MineoCfg, tmuxMgr *tmux.T
 			// Wait until nvim's RPC socket is actually accepting connections
 			ready := config.CheckNvimReady(sockPath, 400)
 			if !ready {
+				if i == 0 {
+					log.Printf("[nvim-open] socket %q not ready yet", sockPath)
+				}
 				if i < maxAttempts-1 {
 					time.Sleep(retryMs * time.Millisecond)
 				}
@@ -552,6 +560,7 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *config.MineoCfg, tmuxMgr *tmux.T
 
 			if err != nil {
 				lastErr = err
+				log.Printf("[nvim-open] --remote-send failed (attempt %d): %v", i+1, err)
 				if i < maxAttempts-1 {
 					time.Sleep(retryMs * time.Millisecond)
 				}
@@ -566,6 +575,7 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *config.MineoCfg, tmuxMgr *tmux.T
 		if lastErr != nil {
 			detail = lastErr.Error()
 		}
+		log.Printf("[nvim-open] giving up: %s", detail)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
 			"error":  "Neovim not running after 10s",
 			"detail": detail,
@@ -644,6 +654,48 @@ func RegisterAPIRoutes(mux *http.ServeMux, cfg *config.MineoCfg, tmuxMgr *tmux.T
 			configDir = filepath.Join(config.HomeDir(), ".config", "nvim")
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"configDir": configDir})
+	})
+
+	// ── GET /api/ui-settings ─────────────────────────────────────────
+	mux.HandleFunc("GET /api/ui-settings", func(w http.ResponseWriter, r *http.Request) {
+		cfg.Mu.RLock()
+		ui := cfg.UI
+		cfg.Mu.RUnlock()
+		writeJSON(w, http.StatusOK, ui)
+	})
+
+	// ── POST /api/ui-settings ─────────────────────────────────────────
+	mux.HandleFunc("POST /api/ui-settings", func(w http.ResponseWriter, r *http.Request) {
+		cfg.Mu.RLock()
+		ui := cfg.UI
+		cfg.Mu.RUnlock()
+
+		var patch struct {
+			FontFamily *string `json:"fontFamily"`
+			FontSize   *int    `json:"fontSize"`
+			Theme      *string `json:"theme"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON"})
+			return
+		}
+		if patch.FontFamily != nil {
+			ui.FontFamily = *patch.FontFamily
+		}
+		if patch.FontSize != nil && *patch.FontSize > 0 {
+			ui.FontSize = *patch.FontSize
+		}
+		if patch.Theme != nil {
+			ui.Theme = *patch.Theme
+		}
+		if err := config.SaveUISettings(configPath, ui); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		cfg.Mu.Lock()
+		cfg.UI = ui
+		cfg.Mu.Unlock()
+		writeJSON(w, http.StatusOK, ui)
 	})
 
 	// ── GET /api/lsp/status ───────────────────────────────────────────

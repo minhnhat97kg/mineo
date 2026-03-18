@@ -11,7 +11,6 @@ interface LspEntry {
 
 export function SettingsPanel() {
     const [settings, setSettings] = useState<MineoSettings>(settingsStore.get());
-    const [workspace, setWorkspace] = useState('');
     const [nvimBin, setNvimBin] = useState('nvim');
     const [configMode, setConfigMode] = useState('system');
     const [configDir, setConfigDir] = useState('');
@@ -24,10 +23,6 @@ export function SettingsPanel() {
 
     // Load server-side settings
     useEffect(() => {
-        fetch('/api/config').then(r => r.json()).then(d => {
-            if (d.workspace) setWorkspace(d.workspace);
-        }).catch(() => {});
-
         fetch('/api/nvim-config').then(r => r.json()).then(d => {
             if (d.bin) setNvimBin(d.bin);
             if (d.configMode) setConfigMode(d.configMode);
@@ -52,17 +47,6 @@ export function SettingsPanel() {
     const handleFontFamily = (v: string) => settingsStore.set({ fontFamily: v });
     const handleFontSize = (v: number) => { if (v >= 8 && v <= 32) settingsStore.set({ fontSize: v }); };
     const handleTheme = (v: string) => settingsStore.set({ theme: v });
-
-    const saveWorkspace = () => {
-        fetch('/api/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ workspace }),
-        }).then(r => {
-            if (r.ok) { flash('Saved'); window.location.reload(); }
-            else flash('Failed to save', true);
-        }).catch(() => flash('Failed to save', true));
-    };
 
     const saveNvim = () => {
         fetch('/api/nvim-config', {
@@ -125,22 +109,6 @@ export function SettingsPanel() {
                             <option key={name} value={name}>{name}</option>
                         ))}
                     </select>
-                </div>
-            </div>
-
-            <div className="sp-section">
-                <div className="sp-section-title">Workspace</div>
-                <div className="sp-field">
-                    <label className="sp-label">Directory</label>
-                    <div className="sp-desc">Absolute path to the workspace root. Changes reload the page.</div>
-                    <div className="sp-row">
-                        <input
-                            className="sp-input"
-                            value={workspace}
-                            onChange={e => setWorkspace(e.target.value)}
-                        />
-                        <button className="sp-btn" onClick={saveWorkspace}>Save</button>
-                    </div>
                 </div>
             </div>
 

@@ -57,13 +57,14 @@ type attachedWindow struct {
 
 // TmuxManager manages a tmux session and its windows.
 type TmuxManager struct {
-	mu         sync.RWMutex
-	session    string                     // tmux session name
-	instances  map[string]*attachedWindow // keyed by mineo instance ID
-	primaryID  string                     // first neovim window
-	cfg        *config.MineoCfg
-	appDir     string
-	layoutPath string // path to .mineo-layout.json
+	mu              sync.RWMutex
+	session         string                     // tmux session name
+	instances       map[string]*attachedWindow // keyed by mineo instance ID
+	primaryID       string                     // first neovim window
+	cfg             *config.MineoCfg
+	appDir          string
+	layoutPath      string // path to .mineo-layout.json
+	placeholderIndex int   // index of the placeholder window 0 to kill after first spawn (-1 if gone)
 }
 
 // NewTmuxManager creates a new TmuxManager, adopting an existing tmux session
@@ -81,11 +82,12 @@ func NewTmuxManager(cfg *config.MineoCfg, appDir string) *TmuxManager {
 	layoutPath := filepath.Join(appDir, ".mineo-layout.json")
 
 	tm := &TmuxManager{
-		session:    sessionName,
-		instances:  make(map[string]*attachedWindow),
-		cfg:        cfg,
-		appDir:     appDir,
-		layoutPath: layoutPath,
+		session:          sessionName,
+		instances:        make(map[string]*attachedWindow),
+		cfg:              cfg,
+		appDir:           appDir,
+		layoutPath:       layoutPath,
+		placeholderIndex: -1,
 	}
 
 	// 3. Check if session exists
@@ -117,8 +119,8 @@ func NewTmuxManager(cfg *config.MineoCfg, appDir string) *TmuxManager {
 		// Set environment
 		tmuxCmd("set-environment", "-t", sessionName, "COLORTERM", "truecolor").Run()
 
-		// Kill the default window 0 created by new-session
-		tmuxCmd("kill-window", "-t", sessionName+":0").Run()
+		// Remember the placeholder window 0 — we'll kill it after the first real window spawns
+		tm.placeholderIndex = 0
 	}
 
 	return tm
@@ -328,6 +330,13 @@ func (tm *TmuxManager) Spawn(id string, role PaneRole, cols, rows uint16, cwd st
 		return err
 	}
 
+	// Kill the placeholder window 0 now that we have a real window
+	if tm.placeholderIndex >= 0 {
+		tmuxCmd("kill-window", "-t",
+			fmt.Sprintf("%s:%d", tm.session, tm.placeholderIndex)).Run()
+		tm.placeholderIndex = -1
+	}
+
 	// Resize the window to match the requested size
 	if cols > 0 && rows > 0 {
 		tmuxCmd("resize-window", "-t",
@@ -493,9 +502,10 @@ func (tm *TmuxManager) Kill(id string) {
 	}
 	tm.mu.Unlock()
 
-	// Close ptmx (kills the attach process, NOT the window process)
+	// Close ptmx and kill the attach process (NOT the window process)
 	inst.ptmx.Close()
 	if inst.cmd.Process != nil {
+		inst.cmd.Process.Kill()
 		inst.cmd.Wait()
 	}
 
@@ -539,9 +549,10 @@ func (tm *TmuxManager) Detach(id string) {
 	}
 	tm.mu.Unlock()
 
-	// Close ptmx (kills the attach process) but do NOT kill the tmux window
+	// Close ptmx and kill the attach process but do NOT kill the tmux window
 	inst.ptmx.Close()
 	if inst.cmd.Process != nil {
+		inst.cmd.Process.Kill()
 		inst.cmd.Wait()
 	}
 

@@ -8,6 +8,7 @@ import './style/settings.css';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { installTouchToMouse } from './touch-to-mouse';
+import { settingsStore } from './settings-store';
 
 const rootEl = document.getElementById('mineo-root')!;
 document.addEventListener('contextmenu', e => e.preventDefault());
@@ -51,4 +52,6 @@ document.addEventListener('touchmove', (e: TouchEvent) => {
 }, { passive: false });
 
 installTouchToMouse();
-createRoot(rootEl).render(<App />);
+settingsStore.load().then(() => {
+    createRoot(rootEl).render(<App />);
+});

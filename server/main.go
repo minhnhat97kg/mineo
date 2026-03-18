@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -22,8 +23,18 @@ import (
 )
 
 func main() {
+	// ── CLI flags (override config file) ──────────────────────────────
+	flagPassword  := flag.String("password", "", "Password to protect the server (overrides config.json)")
+	flagAddress   := flag.String("address", "", "Listen address, e.g. 0.0.0.0:3000 (overrides config.json port)")
+	flagWorkspace := flag.String("workspace", "", "Workspace directory (overrides config.json)")
+	flagConfig    := flag.String("config", "", "Path to config.json (default: next to binary)")
+	flag.Parse()
+
 	// ── Resolve paths ─────────────────────────────────────────────────
-	configPath := os.Getenv("MINEO_CONFIG")
+	configPath := *flagConfig
+	if configPath == "" {
+		configPath = os.Getenv("MINEO_CONFIG")
+	}
 	if configPath == "" {
 		// Default: config.json next to the binary
 		exe, _ := os.Executable()
@@ -52,6 +63,24 @@ func main() {
 		os.Exit(1)
 	}
 	cfg.Secret = secret
+
+	// ── Apply CLI flag overrides ───────────────────────────────────────
+	if *flagPassword != "" {
+		cfg.Password = *flagPassword
+	}
+	if *flagWorkspace != "" {
+		cfg.Workspace = *flagWorkspace
+	}
+	if *flagAddress != "" {
+		// Parse port from address for internal use
+		parts := strings.SplitN(*flagAddress, ":", 2)
+		if len(parts) == 2 {
+			var port int
+			if _, err := fmt.Sscanf(parts[1], "%d", &port); err == nil && port > 0 {
+				cfg.Port = port
+			}
+		}
+	}
 
 	// ── Validate startup preconditions ────────────────────────────────
 	api.ValidateStartup(cfg)
@@ -92,6 +121,9 @@ func main() {
 
 	// ── Start server ──────────────────────────────────────────────────
 	addr := fmt.Sprintf("0.0.0.0:%d", cfg.Port)
+	if *flagAddress != "" {
+		addr = *flagAddress
+	}
 	server := &http.Server{
 		Addr:    addr,
 		Handler: handler,

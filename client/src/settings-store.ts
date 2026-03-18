@@ -1,5 +1,3 @@
-const STORAGE_KEY = 'mineo-settings';
-
 export interface MineoSettings {
     fontFamily: string;
     fontSize: number;
@@ -15,20 +13,21 @@ const DEFAULTS: MineoSettings = {
 type Listener = (settings: MineoSettings) => void;
 
 class SettingsStore {
-    private settings: MineoSettings;
+    private settings: MineoSettings = { ...DEFAULTS };
     private listeners = new Set<Listener>();
+    private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-    constructor() {
-        this.settings = { ...DEFAULTS };
+    // Load settings from server; falls back to defaults on error.
+    async load(): Promise<void> {
         try {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                if (parsed.fontFamily) this.settings.fontFamily = parsed.fontFamily;
-                if (typeof parsed.fontSize === 'number') this.settings.fontSize = parsed.fontSize;
-                if (parsed.theme) this.settings.theme = parsed.theme;
+            const res = await fetch('/api/ui-settings');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.fontFamily) this.settings.fontFamily = data.fontFamily;
+                if (typeof data.fontSize === 'number' && data.fontSize > 0) this.settings.fontSize = data.fontSize;
+                if (data.theme) this.settings.theme = data.theme;
             }
-        } catch { /* ignore */ }
+        } catch { /* use defaults */ }
     }
 
     get(): MineoSettings {
@@ -44,9 +43,17 @@ class SettingsStore {
             }
         }
         if (!changed) return;
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
-        } catch { /* ignore */ }
+
+        // Debounced save to server
+        if (this.saveTimer) clearTimeout(this.saveTimer);
+        this.saveTimer = setTimeout(() => {
+            fetch('/api/ui-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.settings),
+            }).catch(() => {});
+        }, 300);
+
         for (const cb of this.listeners) cb(this.get());
     }
 
