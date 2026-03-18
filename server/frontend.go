@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"io"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -22,11 +23,26 @@ func RegisterFrontend(mux *http.ServeMux) {
 
 	fileServer := http.FileServer(http.FS(sub))
 
+	serveIndex := func(w http.ResponseWriter, r *http.Request) {
+		f, err := sub.Open("index.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer f.Close()
+		stat, err := f.Stat()
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		http.ServeContent(w, r, "index.html", stat.ModTime(), f.(io.ReadSeeker))
+	}
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Try to serve the exact file first
 		path := r.URL.Path
 		if path == "/" {
-			fileServer.ServeHTTP(w, r)
+			serveIndex(w, r)
 			return
 		}
 
@@ -35,13 +51,16 @@ func RegisterFrontend(mux *http.ServeMux) {
 
 		// Check if the file exists in the embedded FS
 		if f, err := sub.Open(fsPath); err == nil {
+			stat, _ := f.Stat()
 			f.Close()
-			fileServer.ServeHTTP(w, r)
-			return
+			// Don't serve directories — fall through to SPA
+			if stat != nil && !stat.IsDir() {
+				fileServer.ServeHTTP(w, r)
+				return
+			}
 		}
 
 		// SPA fallback: serve index.html for non-file paths
-		r.URL.Path = "/"
-		fileServer.ServeHTTP(w, r)
+		serveIndex(w, r)
 	})
 }
